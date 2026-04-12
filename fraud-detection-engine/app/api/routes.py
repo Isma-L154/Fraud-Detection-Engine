@@ -11,7 +11,10 @@ from app.schemas.transaction import (
     ErrorResponse,
 )
 from app.ml.model import fraud_model
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
+limiter = Limiter(key_func=get_remote_address)
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -47,6 +50,7 @@ def health_check():
         503: {"model": ErrorResponse, "description": "Model not loaded"},
     },
 )
+@limiter.limit("30/minute")  # Rate limit to prevent abuse 
 def predict(transaction: TransactionRequest):
     """
     Receives a single transaction and returns a fraud assessment.

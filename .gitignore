@@ -12,6 +12,7 @@ fraud-detection-engine/models/*.pkl
 mlruns/
 mlflow.db
 Docs.txt
+*.pem
 
 # Distribution / packaging
 .Python
