@@ -6,6 +6,14 @@ __pycache__/
 # C extensions
 *.so
 
+#ML Runs
+*/notebooks/creditcard.csv
+fraud-detection-engine/models/*.pkl
+mlruns/
+mlflow.db
+Docs.txt
+*.pem
+
 # Distribution / packaging
 .Python
 build/
