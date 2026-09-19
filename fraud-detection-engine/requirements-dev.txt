@@ -1,13 +1,19 @@
-# Development-only tooling. Deliberately separate from requirements.txt so the
-# Docker image never installs it — the runtime has no use for a linter.
-# Splitting the runtime and training dependencies apart is issue #9.
+# Development tooling. Never installed into the runtime image — the runtime has no
+# use for a linter, and every package here is attack surface it does not need.
 
--r requirements.txt
+-r requirements-train.txt
 
+# Lint, format, type check
 ruff==0.16.8
 mypy==2.3.1
-pre-commit==4.6.2
 pandas-stubs==3.0.5.260914
+pre-commit==4.6.2
+
+# Tests
 pytest==9.1.1
 pytest-cov==7.1.0
 httpx==0.28.1
+
+# Dependency vulnerability scanning. Run `pip-audit` before adding or upgrading
+# anything; CI runs it too (#8).
+pip-audit==2.10.1

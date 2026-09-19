@@ -1,0 +1,6 @@
+# Training dependencies. Needed by notebooks/train.py, never by the service.
+# Deliberately not installed into the runtime image.
+
+-r requirements.txt
+
+mlflow==3.11.1

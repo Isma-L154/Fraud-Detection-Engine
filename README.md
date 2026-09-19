@@ -122,8 +122,13 @@ fraud-detection-engine/
 
 All commands run from `fraud-detection-engine/`, with the virtualenv active.
 
+Dependencies are split three ways so the runtime image installs only what the service
+imports: `requirements.txt` (runtime), `requirements-train.txt` (adds MLflow for
+`notebooks/train.py`), `requirements-dev.txt` (adds linting, types and tests). Each includes
+the one before it.
+
 ```bash
-# Install runtime + development tooling
+# Install runtime + training + development tooling
 pip install -r requirements-dev.txt
 
 # Configure. ENV and CORS_ORIGINS are required — the app refuses to start
