@@ -12,6 +12,7 @@ import pandas as pd
 from app.core.config import PROJECT_ROOT, settings
 from app.core.integrity import sha256_of, verify
 from app.core.risk import risk_level
+from app.ml.artifact import UNKNOWN_VERSION, ArtifactMetadata, unpack
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +21,9 @@ logger = logging.getLogger(__name__)
 # service starts from any directory (#19).
 MODEL_PATH = settings.model_path
 
-# Version tag injected into every prediction response.
-MODEL_VERSION = "1.0.0"
+# The version comes from the artifact itself (see app/ml/artifact.py), not from a
+# constant here. A constant could not change when the file did, so the reported
+# version described this source file rather than the model it claimed to describe.
 
 
 class FraudDetectionModel:
@@ -34,6 +36,7 @@ class FraudDetectionModel:
         # Populated by load(); None until then. Annotated so the type checker can
         # narrow it and catch a predict() that runs before load().
         self._pipeline: Any | None = None
+        self._metadata = ArtifactMetadata()
 
     def load(self) -> None:
         """Load the pipeline from disk. Call once at application startup."""
@@ -59,8 +62,28 @@ class FraudDetectionModel:
                 sha256_of(MODEL_PATH),
             )
 
-        self._pipeline = joblib.load(MODEL_PATH)
-        logger.info(f"Model loaded from {MODEL_PATH} | version={MODEL_VERSION}")
+        artifact = unpack(joblib.load(MODEL_PATH))
+        self._pipeline = artifact.pipeline
+        self._metadata = artifact.metadata
+
+        if self._metadata.version == UNKNOWN_VERSION:
+            # Not an error: an artifact trained before the envelope existed is
+            # unlabelled, not invalid. Saying so beats inventing a version.
+            logger.warning(
+                "Loaded an artifact with no training metadata from %s — "
+                "it will report version '%s'. Retrain to attach provenance.",
+                MODEL_PATH,
+                UNKNOWN_VERSION,
+            )
+        logger.info(
+            "Model loaded",
+            extra={
+                "path": str(MODEL_PATH),
+                "model_version": self._metadata.version,
+                "trained_at": self._metadata.trained_at,
+                "sklearn_version": self._metadata.sklearn_version,
+            },
+        )
 
     @property
     def is_loaded(self) -> bool:
@@ -68,7 +91,12 @@ class FraudDetectionModel:
 
     @property
     def version(self) -> str:
-        return MODEL_VERSION
+        """Identifies the training run that produced the loaded artifact."""
+        return self._metadata.version
+
+    @property
+    def metadata(self) -> ArtifactMetadata:
+        return self._metadata
 
     def predict(self, features: dict) -> dict:
         """
@@ -97,6 +125,6 @@ class FraudDetectionModel:
             "is_fraud": fraud_probability >= settings.decision_threshold,
             "fraud_probability": round(fraud_probability, 4),
             "risk_level": risk_level(fraud_probability),
-            "model_version": MODEL_VERSION,
+            "model_version": self._metadata.version,
             "decision_threshold": settings.decision_threshold,
         }
