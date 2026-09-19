@@ -77,15 +77,10 @@ def test_hsts_is_sent_outside_development(env: str) -> None:
     from fastapi import FastAPI
 
     from app.api.middleware import SecurityHeadersMiddleware
-    from app.core.config import Settings
 
-    settings = Settings(
-        env=env,
-        cors_origins=["https://app.example.com"],
-        model_sha256="b8" + "0" * 62,
-        metrics_token="t" * 32,
-        _env_file=None,
-    )
+    from .factories import deployed_settings
+
+    settings = deployed_settings(env=env)
     probe = FastAPI()
     probe.add_middleware(SecurityHeadersMiddleware, settings=settings)
 

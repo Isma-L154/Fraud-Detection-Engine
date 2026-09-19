@@ -42,6 +42,7 @@ USER appuser
 #   CORS_ORIGINS=["https://your-origin"]
 #   MODEL_SHA256=<sha-256 of models/fraud_model.pkl>  (required outside development)
 #   METRICS_TOKEN=<>=16 chars>                        (required outside development)
+#   API_KEYS={"consumer":"<>=32 chars>"}              (required outside development)
 
 # Document the port — doesn't actually publish it, just metadata
 EXPOSE 8000
