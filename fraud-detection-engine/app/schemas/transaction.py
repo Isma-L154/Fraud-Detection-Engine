@@ -105,10 +105,14 @@ class PredictionResponse(BaseModel):
     internal model details in the future.
     """
 
-    is_fraud: bool  # binary decision
+    is_fraud: bool  # binary decision, taken at decision_threshold
     fraud_probability: float  # model confidence (0.0 - 1.0)
-    risk_level: str  # human-readable: LOW / MEDIUM / HIGH
+    risk_level: str  # human-readable bucket: LOW / MEDIUM / HIGH
     model_version: str  # tracks which model artifact made this call
+    # The operating point this decision was taken at. Returned so a decision can be
+    # attributed after the fact: the same probability is fraud or not depending on
+    # it, and without it a disputed decision cannot be reconstructed.
+    decision_threshold: float
 
 
 class HealthResponse(BaseModel):

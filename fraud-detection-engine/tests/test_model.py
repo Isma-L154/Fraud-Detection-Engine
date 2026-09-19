@@ -5,8 +5,9 @@ from pathlib import Path
 import joblib
 import pytest
 
+from app.core import risk as risk_module
 from app.ml import model as model_module
-from app.ml.model import RISK_THRESHOLDS, FraudDetectionModel
+from app.ml.model import FraudDetectionModel
 
 from .conftest import FakePipeline
 
@@ -82,17 +83,13 @@ def test_risk_level_boundaries(
     ("probability", "expected"),
     [(0.0, False), (0.2999, False), (0.30, True), (0.99, True)],
 )
-def test_is_fraud_uses_the_low_threshold(
+def test_is_fraud_uses_the_decision_threshold(
     valid_transaction: dict[str, float], probability: float, expected: bool
 ) -> None:
-    """Characterises CURRENT behaviour: the binary decision reuses RISK_THRESHOLDS["LOW"].
-
-    That coupling is issue #17. This test pins where the boundary is today so that
-    separating the two is a visible change rather than an accident.
-    """
+    """The decision boundary, at its configured default of 0.30."""
     result = _model_returning(probability).predict(valid_transaction)
     assert result["is_fraud"] is expected
-    assert (probability >= RISK_THRESHOLDS["LOW"]) is expected
+    assert (probability >= model_module.settings.decision_threshold) is expected
 
 
 def test_probability_is_rounded_to_four_decimals(valid_transaction: dict[str, float]) -> None:
@@ -124,3 +121,41 @@ def test_features_reach_the_pipeline_in_training_order(
 def test_response_carries_the_model_version(valid_transaction: dict[str, float]) -> None:
     result = _model_returning(0.1).predict(valid_transaction)
     assert result["model_version"] == FraudDetectionModel().version
+
+
+def test_decision_threshold_is_independent_of_the_risk_buckets(
+    monkeypatch: pytest.MonkeyPatch, valid_transaction: dict[str, float]
+) -> None:
+    """The two used to be the same constant, so retuning one silently retuned the other.
+
+    Moving the decision boundary must leave the presentation buckets exactly where
+    they are.
+    """
+    monkeypatch.setattr(model_module.settings, "decision_threshold", 0.90)
+
+    at_low = _model_returning(0.50).predict(valid_transaction)
+    assert at_low["risk_level"] == "MEDIUM", "buckets must not move with the decision"
+    assert at_low["is_fraud"] is False, "0.50 is below the new 0.90 decision boundary"
+
+    at_high = _model_returning(0.95).predict(valid_transaction)
+    assert at_high["risk_level"] == "HIGH"
+    assert at_high["is_fraud"] is True
+
+
+def test_risk_buckets_are_independent_of_the_decision_threshold(
+    monkeypatch: pytest.MonkeyPatch, valid_transaction: dict[str, float]
+) -> None:
+    """And the reverse: moving a bucket edge must not move the fraud decision."""
+    monkeypatch.setitem(risk_module.RISK_THRESHOLDS, "LOW", 0.05)
+
+    result = _model_returning(0.20).predict(valid_transaction)
+    assert result["risk_level"] == "MEDIUM", "0.20 is now above the moved LOW edge"
+    assert result["is_fraud"] is False, "the decision boundary is still 0.30"
+
+
+def test_response_states_the_threshold_that_produced_the_decision(
+    valid_transaction: dict[str, float],
+) -> None:
+    """A fraud decision that cannot be attributed to a threshold cannot be audited."""
+    result = _model_returning(0.4).predict(valid_transaction)
+    assert result["decision_threshold"] == model_module.settings.decision_threshold

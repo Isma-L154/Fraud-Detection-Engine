@@ -57,6 +57,22 @@ class Settings(BaseSettings):
 
     predict_rate_limit: str = "30/minute"
 
+    decision_threshold: float = Field(
+        0.30,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Fraud probability at or above which a transaction is reported as fraud. "
+            "Separate from the presentation buckets in app/core/risk.py: this is the "
+            "operating point, they are labels. Measured on the 56,962-row holdout "
+            "(98 frauds): at 0.30 precision 0.930 / recall 0.816 / F1 0.870, with 6 "
+            "false positives and 18 missed frauds; at 0.50 precision 0.961 / recall "
+            "0.755 / F1 0.846, with 3 false positives and 24 missed frauds. 0.30 "
+            "catches six more frauds for three more reviews, which is the right trade "
+            "when a review is cheap and a missed fraud is not."
+        ),
+    )
+
     @field_validator("cors_origins")
     @classmethod
     def reject_wildcard_origin(cls, origins: list[str]) -> list[str]:

@@ -10,6 +10,7 @@ import joblib
 import pandas as pd
 
 from app.core.config import PROJECT_ROOT, settings
+from app.core.risk import risk_level
 
 logger = logging.getLogger(__name__)
 
@@ -20,15 +21,6 @@ MODEL_PATH = settings.model_path
 
 # Version tag injected into every prediction response.
 MODEL_VERSION = "1.0.0"
-
-# Thresholds that map a raw probability score to a human-readable risk level.
-# These are business rules and change independently of the model. Decoupling the
-# decision threshold from these buckets is issue #17.
-RISK_THRESHOLDS = {
-    "LOW": 0.30,
-    "MEDIUM": 0.70,
-    "HIGH": 1.01,  # catch-all upper bound
-}
 
 
 class FraudDetectionModel:
@@ -85,22 +77,14 @@ class FraudDetectionModel:
         # predict_proba returns [[prob_legit, prob_fraud]]
         # We only need the fraud probability — index 1
         fraud_probability = float(self._pipeline.predict_proba(X)[0][1])
-        is_fraud = fraud_probability >= RISK_THRESHOLDS["LOW"]
 
         return {
-            "is_fraud": is_fraud,
+            "is_fraud": fraud_probability >= settings.decision_threshold,
             "fraud_probability": round(fraud_probability, 4),
-            "risk_level": self._get_risk_level(fraud_probability),
+            "risk_level": risk_level(fraud_probability),
             "model_version": MODEL_VERSION,
+            "decision_threshold": settings.decision_threshold,
         }
-
-    def _get_risk_level(self, probability: float) -> str:
-        """Map a raw probability to a risk bucket."""
-        if probability < RISK_THRESHOLDS["LOW"]:
-            return "LOW"
-        elif probability < RISK_THRESHOLDS["MEDIUM"]:
-            return "MEDIUM"
-        return "HIGH"
 
 
 # Module-level singleton, imported directly by the route handlers. This is not

@@ -37,7 +37,13 @@ def test_predict_returns_an_assessment(
     response = client.post("/api/v1/predict", json=valid_transaction)
     assert response.status_code == 200
     body = response.json()
-    assert set(body) == {"is_fraud", "fraud_probability", "risk_level", "model_version"}
+    assert set(body) == {
+        "is_fraud",
+        "fraud_probability",
+        "risk_level",
+        "model_version",
+        "decision_threshold",
+    }
     assert isinstance(body["is_fraud"], bool)
     assert 0.0 <= body["fraud_probability"] <= 1.0
     assert body["risk_level"] in {"LOW", "MEDIUM", "HIGH"}
