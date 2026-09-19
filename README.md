@@ -126,15 +126,23 @@ All commands run from `fraud-detection-engine/`, with the virtualenv active.
 # Install runtime + development tooling
 pip install -r requirements-dev.txt
 
+# Tests
+pytest                                    # run the suite
+pytest --cov                              # with a coverage report
+pytest tests/test_api.py -v               # one file, verbose
+
 # Lint, format, type check
-ruff check app/ notebooks/          # lint
-ruff format app/ notebooks/         # format
-ruff format --check app/ notebooks/ # verify formatting without writing
-mypy                                # type check app/
+ruff check app/ notebooks/ tests/         # lint
+ruff format app/ notebooks/ tests/        # format
+ruff format --check app/ notebooks/ tests/  # verify without writing
+mypy                                      # type check app/
 
 # Run the API locally
 uvicorn app.api.main:app --reload --port 8000
 ```
+
+No test loads the real model artifact — the pipeline is substituted with a fake, so the suite
+runs on a fresh clone without `models/fraud_model.pkl` present.
 
 ### Pre-commit hooks
 

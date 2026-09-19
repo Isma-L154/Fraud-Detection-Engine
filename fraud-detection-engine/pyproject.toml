@@ -7,6 +7,20 @@ requires-python = ">=3.11"
 # Runtime dependencies stay in requirements.txt, which is what the Dockerfile
 # installs. Splitting runtime from training and dev dependencies is issue #9.
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Fail on an unregistered mark or an unknown config key rather than silently
+# skipping — a typo'd mark that quietly does nothing is worse than an error.
+addopts = "--strict-markers --strict-config"
+
+[tool.coverage.run]
+source = ["app"]
+
+[tool.coverage.report]
+# No threshold yet: the baseline is recorded in #5 and raised deliberately as
+# coverage improves, rather than set to a number nobody chose.
+show_missing = true
+
 [tool.ruff]
 # The service lives under app/; notebooks/ is training code held to the same rules.
 target-version = "py311"
