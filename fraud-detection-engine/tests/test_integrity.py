@@ -117,7 +117,12 @@ def test_development_loads_without_a_digest_but_warns(
 @pytest.mark.parametrize("env", ["staging", "production"])
 def test_settings_refuse_to_build_without_a_digest_outside_development(env: str) -> None:
     with pytest.raises(ValidationError, match="model_sha256 is required"):
-        Settings(env=env, cors_origins=["https://app.example.com"], _env_file=None)
+        Settings(
+            env=env,
+            cors_origins=["https://app.example.com"],
+            metrics_token="t" * 32,
+            _env_file=None,
+        )
 
 
 def test_development_settings_build_without_a_digest() -> None:

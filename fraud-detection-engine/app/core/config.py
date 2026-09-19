@@ -104,6 +104,26 @@ class Settings(BaseSettings):
         ),
     )
 
+    metrics_token: str | None = Field(
+        None,
+        min_length=16,
+        description=(
+            "Bearer token for /metrics. Required outside development. Metrics are "
+            "internal telemetry: published openly they leak traffic volume, latency "
+            "and the fraud rate. This is deliberately a separate, narrow credential "
+            "and does not pre-empt the API's authentication model (#10)."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def require_metrics_token_outside_development(self) -> "Settings":
+        if self.env != "development" and not self.metrics_token:
+            raise ValueError(
+                "metrics_token is required when env is not 'development' — "
+                "/metrics leaks traffic volume, latency and the fraud rate"
+            )
+        return self
+
     @model_validator(mode="after")
     def require_artifact_digest_outside_development(self) -> "Settings":
         """The digest is mandatory anywhere the artifact is not built locally.

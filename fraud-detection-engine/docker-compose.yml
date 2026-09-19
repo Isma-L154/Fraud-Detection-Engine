@@ -14,6 +14,8 @@ services:
       - LOG_LEVEL=INFO
       # Required: the app refuses to start without an explicit origin allowlist.
       - CORS_ORIGINS=["http://localhost:3000","http://127.0.0.1:3000"]
+      # Development exempts MODEL_SHA256 and METRICS_TOKEN; both are required
+      # in staging and production.
 
     volumes:
       - ./models:/app/models:ro    # ro = read-only inside the container
