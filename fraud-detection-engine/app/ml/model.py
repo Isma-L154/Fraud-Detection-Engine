@@ -10,6 +10,7 @@ import joblib
 import pandas as pd
 
 from app.core.config import PROJECT_ROOT, settings
+from app.core.integrity import sha256_of, verify
 from app.core.risk import risk_level
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,20 @@ class FraudDetectionModel:
             raise FileNotFoundError(
                 f"Model artifact not found at {MODEL_PATH}. "
                 f"Train it with: python {PROJECT_ROOT / 'notebooks' / 'train.py'}"
+            )
+
+        # Verify BEFORE loading. joblib.load is pickle underneath: by the time the
+        # object exists, whatever the file contained has already run.
+        if settings.model_sha256:
+            verify(MODEL_PATH, settings.model_sha256)
+            logger.info("Artifact digest verified")
+        else:
+            # Only reachable in development; Settings refuses to build otherwise.
+            logger.warning(
+                "Loading %s WITHOUT integrity verification — set MODEL_SHA256. "
+                "Unpickling executes the file's contents. Digest is %s",
+                MODEL_PATH,
+                sha256_of(MODEL_PATH),
             )
 
         self._pipeline = joblib.load(MODEL_PATH)

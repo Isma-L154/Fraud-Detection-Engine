@@ -12,7 +12,7 @@ settings and says nothing.
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # app/core/config.py -> app/core -> app -> project root
@@ -72,6 +72,32 @@ class Settings(BaseSettings):
             "when a review is cheap and a missed fraud is not."
         ),
     )
+
+    model_sha256: str | None = Field(
+        None,
+        description=(
+            "Expected SHA-256 of the model artifact, recorded out of band by whoever "
+            "deploys it. Loading a .pkl executes its contents, so an unverified "
+            "artifact is remote code execution at startup. Deliberately NOT read from "
+            "a file beside the artifact: anyone able to rewrite the artifact could "
+            "rewrite that too. `python notebooks/train.py` prints the value."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def require_artifact_digest_outside_development(self) -> "Settings":
+        """The digest is mandatory anywhere the artifact is not built locally.
+
+        Development is exempt because the artifact there is produced by the person
+        running the service, on the machine running it, so there is no transport to
+        protect. Everywhere else it arrives from somewhere and must be checked.
+        """
+        if self.env != "development" and not self.model_sha256:
+            raise ValueError(
+                "model_sha256 is required when env is not 'development' — "
+                "loading an unverified artifact executes whatever it contains"
+            )
+        return self
 
     @field_validator("cors_origins")
     @classmethod
