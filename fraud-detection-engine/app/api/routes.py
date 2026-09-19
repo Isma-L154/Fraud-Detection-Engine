@@ -28,7 +28,7 @@ router = APIRouter()
     response_model=HealthResponse,
     summary="Service health check",
 )
-def health_check():
+def health_check() -> HealthResponse:
     """
     Used by load balancers and monitoring tools to verify the service is up
     and the model is actually loaded in memory — not just that the server responds.
@@ -55,7 +55,7 @@ def health_check():
     },
 )
 @limiter.limit(PREDICT_RATE_LIMIT)  # Rate limit to prevent abuse
-def predict(request: Request, transaction: TransactionRequest):
+def predict(request: Request, transaction: TransactionRequest) -> PredictionResponse:
     """
     Receives a single transaction and returns a fraud assessment.
     Pydantic validates the input before this handler is ever called —
@@ -107,7 +107,7 @@ def predict(request: Request, transaction: TransactionRequest):
     status_code=status.HTTP_202_ACCEPTED,
     summary="Trigger model retraining",
 )
-def retrain():
+def retrain() -> dict[str, str]:
     """
     Placeholder for the retraining pipeline.
     In production this would publish a message to a queue (SQS, Celery)
