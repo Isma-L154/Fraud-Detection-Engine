@@ -40,6 +40,7 @@ USER appuser
 # `docker run` (-e) or in the orchestrator; see .env.example for the full list.
 #   ENV=production|staging|development
 #   CORS_ORIGINS=["https://your-origin"]
+#   MODEL_SHA256=<sha-256 of models/fraud_model.pkl>  (required outside development)
 
 # Document the port — doesn't actually publish it, just metadata
 EXPOSE 8000

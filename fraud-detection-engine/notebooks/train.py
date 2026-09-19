@@ -13,6 +13,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
+from app.core.integrity import sha256_of
+
 # Resolved from this file, not the working directory, so the script reads and writes
 # the same places whether it is run from the project root or from notebooks/.
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -78,6 +80,12 @@ with mlflow.start_run():
     MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(pipeline, MODEL_PATH)
     mlflow.log_artifact(str(MODEL_PATH))
+
+    # The digest the service must be configured with. Printed rather than written
+    # beside the artifact on purpose: a checksum an artifact-writer can also rewrite
+    # verifies nothing. Logged to MLflow so the run that produced it is the record.
+    digest = sha256_of(MODEL_PATH)
+    mlflow.log_param("model_sha256", digest)
 
     print(f"\nAUC-ROC: {auc:.4f}")
     print(classification_report(y_test, y_pred, target_names=["legit", "fraud"]))
