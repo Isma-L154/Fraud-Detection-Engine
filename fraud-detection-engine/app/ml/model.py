@@ -27,9 +27,9 @@ MODEL_VERSION = "1.0.0"
 # These are business rules and change independently of the model. Decoupling the
 # decision threshold from these buckets is issue #17.
 RISK_THRESHOLDS = {
-    "LOW":    0.30,
+    "LOW": 0.30,
     "MEDIUM": 0.70,
-    "HIGH":   1.01,  # catch-all upper bound
+    "HIGH": 1.01,  # catch-all upper bound
 }
 
 
@@ -86,10 +86,10 @@ class FraudDetectionModel:
         is_fraud = fraud_probability >= RISK_THRESHOLDS["LOW"]
 
         return {
-            "is_fraud":          is_fraud,
+            "is_fraud": is_fraud,
             "fraud_probability": round(fraud_probability, 4),
-            "risk_level":        self._get_risk_level(fraud_probability),
-            "model_version":     MODEL_VERSION,
+            "risk_level": self._get_risk_level(fraud_probability),
+            "model_version": MODEL_VERSION,
         }
 
     def _get_risk_level(self, probability: float) -> str:

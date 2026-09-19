@@ -16,27 +16,22 @@ from app.core.rate_limit import limiter
 from app.ml.model import fraud_model
 
 # Structured logging config — outputs consistent format across all modules
-logging.config.dictConfig({
-    "version": 1,
-    "disable_existing_loggers": False,
-    "formatters": {
-        "default": {
-            "format": "%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-            "datefmt": "%Y-%m-%d %H:%M:%S",
-        }
-    },
-    "handlers": {
-        "console": {
-            "class": "logging.StreamHandler",
-            "formatter": "default"
-        }
-    },
-    "root": {
-        "level": "INFO",
-        "handlers": ["console"]
+logging.config.dictConfig(
+    {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "default": {
+                "format": "%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+                "datefmt": "%Y-%m-%d %H:%M:%S",
+            }
+        },
+        "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "default"}},
+        "root": {"level": "INFO", "handlers": ["console"]},
     }
-})
+)
 logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -45,7 +40,7 @@ async def lifespan(app: FastAPI):
     Loading the model here guarantees it's in memory before the first request
     arrives — never load it lazily inside a request handler.
     """
-    #Startup
+    # Startup
     logger.info("Starting up — loading model...")
     fraud_model.load()
     logger.info("Model ready. Accepting requests.")
@@ -53,6 +48,7 @@ async def lifespan(app: FastAPI):
     yield  # app is running and serving requests here
 
     logger.info("Shutting down.")
+
 
 app = FastAPI(
     title="Fraud Detection Engine",

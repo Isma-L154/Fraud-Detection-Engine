@@ -19,9 +19,10 @@ from app.schemas.transaction import (
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-#---------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------
 
-#Good for testing and debugging **It's not used in production**
+
+# Good for testing and debugging **It's not used in production**
 @router.get(
     "/health",
     response_model=HealthResponse,
@@ -38,7 +39,9 @@ def health_check():
         model_version=fraud_model.version,
     )
 
-#---------------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------------
+
 
 # The main fraud prediction endpoint. Expects a JSON body matching TransactionRequest.
 @router.post(
@@ -92,7 +95,10 @@ def predict(request: Request, transaction: TransactionRequest):
     )
 
     return PredictionResponse(**result)
-#---------------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------------
+
 
 # This endpoint is a placeholder for triggering model retraining
 # In production this would publish to a queue rather than doing the work synchronously.
