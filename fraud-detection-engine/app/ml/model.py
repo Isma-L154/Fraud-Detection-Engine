@@ -1,12 +1,11 @@
 # Singleton model loader. The pipeline is loaded once at startup and reused
-# across all requests. Never load from disk inside a request handler. 
+# across all requests. Never load from disk inside a request handler.
 # (I used Singleton pattern here, helps me save memory and speed up inference by reusing the same model instance across requests.)
 
-import joblib
 import logging
 from pathlib import Path
-from typing import Optional
-import numpy as np
+
+import joblib
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -20,7 +19,7 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MODEL_PATH = PROJECT_ROOT / "models" / "fraud_model.pkl"
 
-# Version tag injected into every prediction response. 
+# Version tag injected into every prediction response.
 MODEL_VERSION = "1.0.0"
 
 # Thresholds that map a raw probability score to a human-readable risk level.

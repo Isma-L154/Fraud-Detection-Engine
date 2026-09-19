@@ -3,15 +3,17 @@
 
 import logging
 import logging.config
-from contextlib import asynccontextmanager
 import os
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
 from app.api.routes import router
 from app.core.rate_limit import limiter
 from app.ml.model import fraud_model
-from slowapi import _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
 
 # Structured logging config — outputs consistent format across all modules
 logging.config.dictConfig({
@@ -43,7 +45,7 @@ async def lifespan(app: FastAPI):
     Loading the model here guarantees it's in memory before the first request
     arrives — never load it lazily inside a request handler.
     """
-    #Startup 
+    #Startup
     logger.info("Starting up — loading model...")
     fraud_model.load()
     logger.info("Model ready. Accepting requests.")

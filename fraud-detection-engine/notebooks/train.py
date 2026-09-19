@@ -3,15 +3,15 @@
 
 from pathlib import Path
 
-import pandas as pd
 import joblib
 import mlflow
 import mlflow.sklearn
+import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import classification_report, roc_auc_score
+from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 
 # Resolved from this file, not the working directory, so the script reads and writes
 # the same places whether it is run from the project root or from notebooks/.
