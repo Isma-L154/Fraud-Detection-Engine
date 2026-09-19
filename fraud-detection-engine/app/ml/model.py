@@ -1,7 +1,7 @@
-# Singleton model loader. The pipeline is loaded once at startup and reused
-# across all requests. Never load from disk inside a request handler.
-# A single shared instance keeps the pipeline in memory across requests instead of
-# deserialising a 3.5 MB artifact on each one.
+# Loads the trained pipeline once and scores transactions with it. One instance is
+# created during the application lifespan and shared across requests — never load
+# from disk inside a request handler; deserialising a 3.5 MB artifact per request
+# would dominate the latency.
 
 import logging
 from typing import Any
@@ -85,9 +85,3 @@ class FraudDetectionModel:
             "model_version": MODEL_VERSION,
             "decision_threshold": settings.decision_threshold,
         }
-
-
-# Module-level singleton, imported directly by the route handlers. This is not
-# dependency injection and cannot be substituted without patching — moving it
-# behind a FastAPI dependency is issue #18.
-fraud_model = FraudDetectionModel()

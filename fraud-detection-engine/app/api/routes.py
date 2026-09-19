@@ -5,10 +5,11 @@
 import logging
 import time
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+from app.api.dependencies import get_scorer
 from app.core.rate_limit import PREDICT_RATE_LIMIT, limiter
-from app.ml.model import fraud_model
+from app.ml.protocol import TransactionScorer
 from app.schemas.transaction import (
     ErrorResponse,
     HealthResponse,
@@ -29,15 +30,15 @@ router = APIRouter()
     response_model=HealthResponse,
     summary="Service health check",
 )
-def health_check() -> HealthResponse:
+def health_check(scorer: TransactionScorer = Depends(get_scorer)) -> HealthResponse:
     """
     Used by load balancers and monitoring tools to verify the service is up
     and the model is actually loaded in memory — not just that the server responds.
     """
     return HealthResponse(
-        status="ok" if fraud_model.is_loaded else "degraded",
-        model_loaded=fraud_model.is_loaded,
-        model_version=fraud_model.version,
+        status="ok" if scorer.is_loaded else "degraded",
+        model_loaded=scorer.is_loaded,
+        model_version=scorer.version,
     )
 
 
@@ -56,7 +57,11 @@ def health_check() -> HealthResponse:
     },
 )
 @limiter.limit(PREDICT_RATE_LIMIT)  # Rate limit to prevent abuse
-def predict(request: Request, transaction: TransactionRequest) -> PredictionResponse:
+def predict(
+    request: Request,
+    transaction: TransactionRequest,
+    scorer: TransactionScorer = Depends(get_scorer),
+) -> PredictionResponse:
     """
     Receives a single transaction and returns a fraud assessment.
     Pydantic validates the input before this handler is ever called —
@@ -66,7 +71,7 @@ def predict(request: Request, transaction: TransactionRequest) -> PredictionResp
     address off it to build the rate-limit key, and refuses to decorate a
     handler that does not accept one.
     """
-    if not fraud_model.is_loaded:
+    if not scorer.is_loaded:
         # Should not happen in normal operation, but guards the case where the model
         # failed to load at startup.
         raise HTTPException(
@@ -76,7 +81,7 @@ def predict(request: Request, transaction: TransactionRequest) -> PredictionResp
     start_time = time.perf_counter()
 
     try:
-        result = fraud_model.predict(transaction.model_dump())
+        result = scorer.predict(transaction.model_dump())
     except Exception as e:
         # Log the full error internally but never expose raw exception messages to the client
         # (Because they could contain sensitive info or be exploited by attackers)

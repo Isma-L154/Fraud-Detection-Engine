@@ -1,9 +1,7 @@
 """Shared fixtures.
 
-The model is a module-level global (`app.ml.model.fraud_model`) imported directly by
-the route handlers, so there is no dependency to override — the only way to substitute
-it is to patch the object. Moving it behind a FastAPI dependency is issue #18; when
-that lands, these fixtures collapse into `app.dependency_overrides`.
+The scorer reaches handlers through `get_scorer`, so tests replace it with
+`app.dependency_overrides` — no module patching.
 
 No test here loads the real 3.5 MB artifact.
 """
@@ -20,6 +18,8 @@ os.environ.setdefault("CORS_ORIGINS", '["http://localhost:3000"]')
 
 import pytest
 from fastapi.testclient import TestClient
+
+from app.ml.model import FraudDetectionModel
 
 
 class FakePipeline:
@@ -59,30 +59,17 @@ def fake_pipeline() -> FakePipeline:
     return FakePipeline()
 
 
-@pytest.fixture
-def loaded_model(
-    monkeypatch: pytest.MonkeyPatch, fake_pipeline: FakePipeline
-) -> Iterator[FakePipeline]:
-    """Put the singleton into a loaded state backed by the fake pipeline.
-
-    `load()` is also stubbed, because the FastAPI lifespan calls it on startup and
-    would otherwise read the real artifact from disk.
-    """
-    from app.ml import model as model_module
-
-    monkeypatch.setattr(model_module.fraud_model, "_pipeline", fake_pipeline)
-    monkeypatch.setattr(model_module.fraud_model, "load", lambda: None)
-    yield fake_pipeline
+def build_scorer(pipeline: Any | None) -> FraudDetectionModel:
+    """A FraudDetectionModel backed by `pipeline`, or unloaded when None."""
+    scorer = FraudDetectionModel()
+    scorer._pipeline = pipeline
+    return scorer
 
 
 @pytest.fixture
-def unloaded_model(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    """Leave the singleton unloaded, as it would be if startup had failed."""
-    from app.ml import model as model_module
-
-    monkeypatch.setattr(model_module.fraud_model, "_pipeline", None)
-    monkeypatch.setattr(model_module.fraud_model, "load", lambda: None)
-    yield
+def loaded_model(fake_pipeline: FakePipeline) -> FakePipeline:
+    """The fake pipeline the `client` fixture scores with."""
+    return fake_pipeline
 
 
 @pytest.fixture(autouse=True)
@@ -101,9 +88,35 @@ def disable_rate_limit(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 
 
 @pytest.fixture
-def client(loaded_model: FakePipeline) -> Iterator[TestClient]:
-    """A client against an app whose model is loaded with the fake pipeline."""
+def make_client() -> Iterator[Any]:
+    """Build a TestClient whose scorer is overridden with the given pipeline.
+
+    The lifespan still runs — it just no longer decides what the handlers use, so
+    the real artifact is never read.
+    """
+    from app.api.dependencies import get_scorer
     from app.api.main import app
 
-    with TestClient(app) as test_client:
-        yield test_client
+    clients = []
+
+    def _make(pipeline: Any | None) -> TestClient:
+        scorer = build_scorer(pipeline)
+        app.dependency_overrides[get_scorer] = lambda: scorer
+        client = TestClient(app)
+        clients.append(client)
+        return client
+
+    yield _make
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def client(make_client: Any, fake_pipeline: FakePipeline) -> TestClient:
+    """A client against an app whose scorer is the fake pipeline."""
+    return make_client(fake_pipeline)
+
+
+@pytest.fixture
+def unloaded_client(make_client: Any) -> TestClient:
+    """A client whose scorer has no pipeline, as after a failed startup."""
+    return make_client(None)

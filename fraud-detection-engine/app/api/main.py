@@ -14,7 +14,7 @@ from app.api.routes import router
 from app.core.config import settings
 from app.core.logging import configure_logging
 from app.core.rate_limit import limiter
-from app.ml.model import fraud_model
+from app.ml.model import FraudDetectionModel
 
 configure_logging(settings.log_level)
 logger = logging.getLogger(__name__)
@@ -27,9 +27,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     Loading the model here guarantees it's in memory before the first request
     arrives — never load it lazily inside a request handler.
     """
-    # Startup
+    # Startup. The scorer is built here and stored on app.state, so handlers reach
+    # it through a dependency rather than importing a module global.
     logger.info("Starting up in %s — loading model...", settings.env)
-    fraud_model.load()
+    scorer = FraudDetectionModel()
+    scorer.load()
+    app.state.scorer = scorer
     logger.info("Model ready. Accepting requests.")
 
     yield  # app is running and serving requests here

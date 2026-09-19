@@ -39,6 +39,13 @@ select = [
     "RUF",  # ruff's own rules
 ]
 
+[tool.ruff.lint.flake8-bugbear]
+# B008 flags a function call in an argument default. `Depends(...)` in a default is
+# the FastAPI idiom for declaring a dependency, and the call is evaluated once at
+# import to build the dependency graph — not per request. Bugbear has no way to know
+# that, so the two are declared immutable rather than suppressed at each call site.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Security"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["app"]
 
