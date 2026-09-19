@@ -1,0 +1,56 @@
+[project]
+name = "fraud-detection-engine"
+version = "1.0.0"
+description = "Real-time credit card fraud detection API"
+requires-python = ">=3.11"
+
+# Runtime dependencies stay in requirements.txt, which is what the Dockerfile
+# installs. Splitting runtime from training and dev dependencies is issue #9.
+
+[tool.ruff]
+# The service lives under app/; notebooks/ is training code held to the same rules.
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes — unused imports, undefined names
+    "I",    # isort — import ordering
+    "B",    # flake8-bugbear — likely bugs
+    "C4",   # flake8-comprehensions
+    "UP",   # pyupgrade — outdated syntax for the target version
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff's own rules
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.ruff.format]
+# ruff format over black: one tool and one config for linting and formatting,
+# with output that matches black's. Nothing here needs black specifically.
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.11"
+files = ["app"]
+
+# Started at the strictness the existing code already supports. The three flags
+# below are the ones that would currently fail; tighten them as the code allows
+# rather than leaving mypy permanently disabled on real findings.
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+no_implicit_optional = true
+check_untyped_defs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+
+[[tool.mypy.overrides]]
+# These ship no type information. Without this, every import is an error that
+# says nothing about our own code.
+module = ["joblib.*", "sklearn.*", "slowapi.*", "mlflow.*", "evidently.*"]
+ignore_missing_imports = true
