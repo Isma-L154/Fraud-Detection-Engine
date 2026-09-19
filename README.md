@@ -115,3 +115,48 @@ fraud-detection-engine/
 - Why monitoring (Evidently) is critical for detecting data drift  
 - How to deploy an ML service on AWS using EC2, S3, and ECR  
 - The challenges of working with imbalanced datasets  
+
+---
+
+## 🛠️ Development
+
+All commands run from `fraud-detection-engine/`, with the virtualenv active.
+
+```bash
+# Install runtime + development tooling
+pip install -r requirements-dev.txt
+
+# Lint, format, type check
+ruff check app/ notebooks/          # lint
+ruff format app/ notebooks/         # format
+ruff format --check app/ notebooks/ # verify formatting without writing
+mypy                                # type check app/
+
+# Run the API locally
+uvicorn app.api.main:app --reload --port 8000
+```
+
+### Pre-commit hooks
+
+The same checks run before a commit exists, rather than after a pull request is rejected.
+Install once per clone, from the repository root:
+
+```bash
+pre-commit install
+pre-commit run --all-files   # first run, over the whole tree
+```
+
+The `mypy` hook resolves from `PATH`, so the virtualenv must be active when committing.
+
+**Windows note.** If `pre-commit` fails while building a hook environment with
+`[WinError 206] The filename or extension is too long`, it is hitting the 260-character path
+limit — likely with a Microsoft Store Python, whose install path is already very long. Either
+enable long paths system-wide, or point virtualenv's cache somewhere short:
+
+```powershell
+# One-off for the current shell
+$env:VIRTUALENV_APP_DATA = "C:\vecache"
+
+# Or permanently
+[Environment]::SetEnvironmentVariable("VIRTUALENV_APP_DATA", "C:\vecache", "User")
+```
