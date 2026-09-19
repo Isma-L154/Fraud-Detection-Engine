@@ -1,0 +1,9 @@
+# requirements.txt was committed as UTF-16LE, which made it unreadable to grep, to
+# diffs, and to any consumer that is not pip. Pinning it to LF text keeps an editor
+# or a shell redirection from reintroducing CRLF on a future edit.
+requirements.txt text eol=lf
+
+# Model artifacts and datasets are binary; never let git rewrite bytes inside them.
+*.pkl binary
+*.db binary
+*.csv -text
