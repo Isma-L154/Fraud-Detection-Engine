@@ -77,14 +77,15 @@ def test_a_token_is_required_when_configured(
     monkeypatch.setattr(settings, "metrics_token", "s" * 32)
 
     assert client.get("/api/v1/metrics").status_code == 401
-    assert client.get("/api/v1/metrics", headers={"Authorization": "Bearer wrong"}).status_code == 401
+
+    wrong = client.get("/api/v1/metrics", headers={"Authorization": "Bearer wrong"})
+    assert wrong.status_code == 401
+
     ok = client.get("/api/v1/metrics", headers={"Authorization": "Bearer " + "s" * 32})
     assert ok.status_code == 200
 
 
-def test_the_401_does_not_leak_metrics(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_the_401_does_not_leak_metrics(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "metrics_token", "s" * 32)
     response = client.get("/api/v1/metrics")
     assert "fraud_http_requests_total" not in response.text
