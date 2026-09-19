@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
+from app.api.batch_cost import BatchCostMiddleware
 from app.api.body_limit import BodySizeLimitMiddleware
 from app.api.metrics import MODEL_INFO, MODEL_LOADED, MetricsMiddleware
 from app.api.middleware import SecurityHeadersMiddleware
@@ -73,6 +74,10 @@ app.add_middleware(RequestIdMiddleware)
 
 # Inside the request id so metrics see the final status code of every response.
 app.add_middleware(MetricsMiddleware)
+
+# Counts batch items so the rate limiter can charge per transaction. Registered
+# inside the size limit, which has already capped what this may buffer.
+app.add_middleware(BatchCostMiddleware)
 
 # Added last so it wraps everything else: an oversized body must be refused before
 # any other middleware or handler has had to hold it in memory.

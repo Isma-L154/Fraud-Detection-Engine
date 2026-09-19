@@ -14,6 +14,8 @@ from app.core.config import settings
 from app.core.rate_limit import PREDICT_RATE_LIMIT, limiter
 from app.ml.protocol import TransactionScorer
 from app.schemas.transaction import (
+    BatchPredictionResponse,
+    BatchTransactionRequest,
     ErrorResponse,
     HealthResponse,
     PredictionResponse,
@@ -22,6 +24,12 @@ from app.schemas.transaction import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _batch_cost(request: Request) -> int:
+    """One unit per transaction, counted by BatchCostMiddleware before parsing."""
+    return int(request.scope.get("state", {}).get("batch_size", 1))
+
 
 # ---------------------------------------------------------------------------------
 
@@ -118,6 +126,71 @@ def predict(
     metrics.PREDICTIONS.labels(result["risk_level"], str(result["is_fraud"]).lower()).inc()
 
     return PredictionResponse(**result)
+
+
+# ---------------------------------------------------------------------------------
+
+
+# Scores several transactions in one pass. sklearn's per-call overhead dominates a
+# single-row prediction, so this is materially cheaper per transaction than N calls.
+@router.post(
+    "/predict/batch",
+    response_model=BatchPredictionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Evaluate several transactions for fraud",
+    responses={
+        422: {"model": ErrorResponse, "description": "Invalid input data"},
+        503: {"model": ErrorResponse, "description": "Model not loaded"},
+    },
+)
+@limiter.limit(PREDICT_RATE_LIMIT, cost=lambda request: _batch_cost(request))
+def predict_batch(
+    request: Request,
+    batch: BatchTransactionRequest,
+    scorer: TransactionScorer = Depends(get_scorer),
+) -> BatchPredictionResponse:
+    """Score a batch, returning results in the submitted order.
+
+    The rate limit charges one unit per transaction, not one per request —
+    otherwise batching would be a trivial way to multiply throughput past the
+    per-request limit by the batch size.
+    """
+    if not scorer.is_loaded:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Model is not available. Try again later.",
+        )
+
+    start_time = time.perf_counter()
+
+    try:
+        with metrics.PREDICTION_DURATION.time():
+            results = scorer.predict_many([t.model_dump() for t in batch.transactions])
+    except Exception as e:
+        logger.error("batch prediction failed", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Prediction failed. The error has been logged.",
+        ) from e
+
+    latency_ms = (time.perf_counter() - start_time) * 1000
+    for result in results:
+        metrics.PREDICTIONS.labels(result["risk_level"], str(result["is_fraud"]).lower()).inc()
+
+    logger.info(
+        "batch prediction",
+        extra={
+            "count": len(results),
+            "latency_ms": round(latency_ms, 1),
+            "latency_ms_per_transaction": round(latency_ms / len(results), 3),
+            "model_version": results[0]["model_version"] if results else "",
+        },
+    )
+
+    return BatchPredictionResponse(
+        predictions=[PredictionResponse(**r) for r in results],
+        count=len(results),
+    )
 
 
 # ---------------------------------------------------------------------------------

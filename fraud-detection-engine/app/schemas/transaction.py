@@ -6,6 +6,8 @@
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.core.config import settings
+
 
 class TransactionRequest(BaseModel):
     """
@@ -132,3 +134,29 @@ class ErrorResponse(BaseModel):
     """
 
     detail: str
+
+
+class BatchTransactionRequest(BaseModel):
+    """Several transactions scored in one request.
+
+    The batch is rejected as a whole if any item is invalid. Per-item results would
+    be more forgiving, but a partially-applied batch is harder to reason about than
+    a rejected one, and the baseline is to reject invalid input outright rather than
+    accept some of it. The 422 names the offending index.
+    """
+
+    transactions: list[TransactionRequest] = Field(
+        ...,
+        min_length=1,
+        max_length=settings.max_batch_size,
+        description="Transactions to score. Results are returned in this order.",
+    )
+
+    model_config = {"extra": "forbid"}
+
+
+class BatchPredictionResponse(BaseModel):
+    """Results in the same order as the submitted transactions."""
+
+    predictions: list[PredictionResponse]
+    count: int
