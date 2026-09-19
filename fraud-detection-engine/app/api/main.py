@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
+from app.api.middleware import SecurityHeadersMiddleware
 from app.api.routes import router
 from app.core.config import settings
 from app.core.logging import configure_logging
@@ -55,6 +56,10 @@ app.state.limiter = limiter
 # slowapi types its handler against RateLimitExceeded rather than Exception, which
 # is narrower than Starlette's signature. The call is correct at runtime.
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
+
+# Security headers on every response, added before CORS so it runs outermost and
+# cannot be skipped by a response short-circuited further in.
+app.add_middleware(SecurityHeadersMiddleware, settings=settings)
 
 # Origins come from configuration so staging and production differ without a code
 # change. CORS restrains browsers, not curl — it is never authorisation (#12).
