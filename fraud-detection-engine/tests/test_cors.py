@@ -7,7 +7,12 @@ the endpoint.
 
 from fastapi.testclient import TestClient
 
-ALLOWED = "http://localhost:3000"  # set by tests/conftest.py
+from app.core.config import settings
+
+# Read from the running configuration rather than hardcoded. conftest.py uses
+# setdefault, so a developer with CORS_ORIGINS already exported would otherwise see
+# these fail for a reason that has nothing to do with the code.
+ALLOWED = settings.cors_origins[0]
 DISALLOWED = "https://evil.example.com"
 
 

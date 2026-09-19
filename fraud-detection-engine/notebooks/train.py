@@ -2,8 +2,14 @@
 # Output: models/fraud_model.pkl (scaler + classifier bundled together)
 
 import argparse
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
+
+# This script lives in a subdirectory but imports from app/, so the project root
+# has to be importable. Without this, `python notebooks/train.py` — the command the
+# README gives — fails with ModuleNotFoundError before doing anything.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import joblib
 import mlflow
