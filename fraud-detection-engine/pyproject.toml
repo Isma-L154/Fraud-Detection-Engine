@@ -51,6 +51,7 @@ disallow_incomplete_defs = true
 
 [[tool.mypy.overrides]]
 # These ship no type information. Without this, every import is an error that
-# says nothing about our own code.
-module = ["joblib.*", "sklearn.*", "slowapi.*", "mlflow.*", "evidently.*"]
+# says nothing about our own code. Only the modules app/ actually imports are
+# listed — an unused override is itself a mypy warning.
+module = ["joblib.*", "slowapi.*"]
 ignore_missing_imports = true

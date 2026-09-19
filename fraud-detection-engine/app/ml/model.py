@@ -5,6 +5,7 @@
 
 import logging
 from pathlib import Path
+from typing import Any
 
 import joblib
 import pandas as pd
@@ -40,7 +41,9 @@ class FraudDetectionModel:
     """
 
     def __init__(self) -> None:
-        self._pipeline = None  # loaded lazily on first call to load()
+        # Populated by load(); None until then. Annotated so the type checker can
+        # narrow it and catch a predict() that runs before load().
+        self._pipeline: Any | None = None
 
     def load(self) -> None:
         """Load the pipeline from disk. Call once at application startup."""
@@ -73,7 +76,9 @@ class FraudDetectionModel:
         Returns:
             dict with is_fraud, fraud_probability, risk_level, model_version
         """
-        if not self.is_loaded:
+        # Checked against _pipeline rather than the is_loaded property so the type
+        # checker narrows it for the predict_proba call below.
+        if self._pipeline is None:
             raise RuntimeError("Model is not loaded. Call load() before predict().")
 
         # Build a single-row DataFrame preserving feature column order.

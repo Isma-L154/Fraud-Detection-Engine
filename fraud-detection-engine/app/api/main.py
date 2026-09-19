@@ -4,6 +4,7 @@
 import logging
 import logging.config
 import os
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -34,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """
     Runs startup logic before the app accepts requests, and cleanup on shutdown.
     Loading the model here guarantees it's in memory before the first request
@@ -62,7 +63,9 @@ app = FastAPI(
 # slowapi reads the limiter off app.state at request time, so this has to happen
 # after the app exists — and it has to be the same instance the routes decorate.
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# slowapi types its handler against RateLimitExceeded rather than Exception, which
+# is narrower than Starlette's signature. The call is correct at runtime.
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
 # CORS middleware — adjust origins as needed for your frontend
 app.add_middleware(
