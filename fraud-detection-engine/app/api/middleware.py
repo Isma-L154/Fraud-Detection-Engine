@@ -28,9 +28,7 @@ BASE_HEADERS = {
 }
 
 # For JSON responses. The API returns data, never markup, so nothing needs to load.
-API_CSP = (
-    "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
-)
+API_CSP = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
 
 # For the generated documentation pages, which render HTML and pull Swagger UI and
 # ReDoc assets from jsDelivr. This is the narrowest policy those pages actually run
@@ -74,8 +72,6 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # from a plaintext development server teaches the browser to refuse http://
         # for this host, which then persists past the end of the session.
         if self._settings.env != "development":
-            response.headers["Strict-Transport-Security"] = (
-                "max-age=31536000; includeSubDomains"
-            )
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
 
         return response

@@ -67,6 +67,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_methods=["GET", "POST"],
-    allow_headers=["*"],
+    # The API consumes a JSON body and nothing else. "*" accepted any request header,
+    # which is wider than anything this service reads. Add to this list when an
+    # endpoint genuinely needs a header, rather than reopening it.
+    allow_headers=["Content-Type", "Accept"],
 )
 app.include_router(router, prefix="/api/v1")
