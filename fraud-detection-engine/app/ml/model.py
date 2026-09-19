@@ -106,5 +106,7 @@ class FraudDetectionModel:
         return "HIGH"
 
 
-# Module-level singleton — imported by FastAPI's dependency injection
+# Module-level singleton, imported directly by the route handlers. This is not
+# dependency injection and cannot be substituted without patching — moving it
+# behind a FastAPI dependency is issue #18.
 fraud_model = FraudDetectionModel()

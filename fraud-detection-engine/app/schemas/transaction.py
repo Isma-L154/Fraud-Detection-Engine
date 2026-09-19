@@ -46,12 +46,17 @@ class TransactionRequest(BaseModel):
 
     @field_validator("Amount")
     @classmethod
-    def amount_must_be_positive(cls, v: float) -> float:
-        # Transactions of exactly $0 are suspicious — flag them but allow through
-        # A real system might route these to a separate review queue
-        if v == 0:
-            pass  # allowed, but worth knowing about
-        return round(v, 2)  # normalize to 2 decimal places like real currency
+    def amount_must_have_currency_precision(cls, v: float) -> float:
+        # This used to round to 2 decimals and return. That meant a client sending
+        # 10.999 was scored on 11.0 and never told — the service made a fraud
+        # decision about a different amount than the one it received. Rejecting is
+        # the only honest option: never silently coerce input.
+        #
+        # Zero is allowed. It is worth noticing operationally, but that belongs in
+        # monitoring, not in a validator that can only accept or reject.
+        if round(v, 2) != v:
+            raise ValueError("Amount must have at most two decimal places")
+        return v
 
     model_config = {
         # Reject any fields not defined above (prevents parameter pollution attacks)
@@ -113,5 +118,13 @@ class HealthResponse(BaseModel):
 
 
 class ErrorResponse(BaseModel):
+    """What the API returns on an error.
+
+    Mirrors FastAPI's HTTPException body, which carries `detail` and nothing else.
+    A `code` field was declared here and advertised in the OpenAPI schema, but no
+    handler ever populated it — the documented contract promised a field the service
+    did not return. Reinstate it only alongside an error-code taxonomy that handlers
+    actually emit.
+    """
+
     detail: str
-    code: str

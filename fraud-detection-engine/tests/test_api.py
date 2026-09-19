@@ -133,3 +133,23 @@ def test_rate_limit_rejects_the_thirty_first_request(
 
     assert codes[:30] == [200] * 30, "the first 30 requests should be served"
     assert codes[30] == 429, "the 31st request should be rejected"
+
+
+def test_error_responses_match_the_documented_schema(
+    unloaded_model: None, valid_transaction: dict[str, float]
+) -> None:
+    """The OpenAPI schema must describe what the API actually returns.
+
+    ErrorResponse is advertised on /predict for 422 and 503. It previously declared a
+    `code` field that no handler ever populated, so the documented contract was a
+    promise the service did not keep.
+    """
+    from app.api.main import app
+    from app.schemas.transaction import ErrorResponse
+
+    with TestClient(app) as client:
+        unavailable = client.post("/api/v1/predict", json=valid_transaction)
+
+    assert unavailable.status_code == 503
+    # Every declared field is present in the real response.
+    assert set(ErrorResponse.model_fields) <= set(unavailable.json())

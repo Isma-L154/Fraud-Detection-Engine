@@ -22,7 +22,8 @@ router = APIRouter()
 # ---------------------------------------------------------------------------------
 
 
-# Good for testing and debugging **It's not used in production**
+# Called by the container HEALTHCHECK in the Dockerfile, so this is a production
+# endpoint, not a debugging convenience.
 @router.get(
     "/health",
     response_model=HealthResponse,
@@ -100,7 +101,8 @@ def predict(request: Request, transaction: TransactionRequest) -> PredictionResp
 # ---------------------------------------------------------------------------------
 
 
-# This endpoint is a placeholder for triggering model retraining
+# A stub: it reports success without queueing anything, and requires no
+# authentication. Both are tracked in issue #11.
 # In production this would publish to a queue rather than doing the work synchronously.
 @router.post(
     "/retrain",

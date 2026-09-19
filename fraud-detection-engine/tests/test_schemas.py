@@ -79,12 +79,24 @@ def test_rejects_an_unexpected_field(valid_transaction: dict[str, float]) -> Non
     assert "is_admin" in str(exc.value)
 
 
-def test_amount_is_rounded_to_two_decimals(valid_transaction: dict[str, float]) -> None:
-    """Characterises CURRENT behaviour, which is silent coercion.
-
-    The validator rounds rather than rejecting, so a client sending 10.999 is scored
-    on 11.0 and never told. Issue #20 decides whether that becomes a rejection; this
-    test exists so that change is visible rather than silent.
+@pytest.mark.parametrize("amount", [10.999, 0.001, 149.625, 1.23456])
+def test_rejects_amount_with_more_than_two_decimals(
+    valid_transaction: dict[str, float], amount: float
+) -> None:
+    """The validator used to round silently, so a client sending 10.999 was scored on
+    11.0 and never told. Scoring a value other than the one that was sent is exactly
+    the silent coercion the validation baseline rules out — it is now a rejection.
     """
-    valid_transaction["Amount"] = 10.999
-    assert TransactionRequest(**valid_transaction).Amount == 11.0
+    valid_transaction["Amount"] = amount
+    with pytest.raises(ValidationError) as exc:
+        TransactionRequest(**valid_transaction)
+    assert "two decimal places" in str(exc.value)
+
+
+@pytest.mark.parametrize("amount", [0.0, 1.0, 10.5, 149.62, 50_000.0])
+def test_accepts_amount_with_at_most_two_decimals(
+    valid_transaction: dict[str, float], amount: float
+) -> None:
+    """Accepted values pass through untouched — no rounding, no normalisation."""
+    valid_transaction["Amount"] = amount
+    assert TransactionRequest(**valid_transaction).Amount == amount
