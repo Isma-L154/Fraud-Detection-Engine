@@ -20,7 +20,9 @@ decision you can trace back to the run that produced it.
 | POST | `/api/v1/predict` | Score one transaction |
 | POST | `/api/v1/predict/batch` | Score up to 100 in one request — ~100x cheaper per transaction |
 | POST | `/api/v1/metrics` | Prometheus exposition (bearer token) |
-| POST | `/api/v1/retrain` | **Stub.** Returns 202 and queues nothing — see [#11](../../issues/11) |
+| POST | `/api/v1/retrain` | Returns **501**: deliberately not implemented. Train offline |
+
+All endpoints except `/health` require `X-API-Key`.
 
 ```jsonc
 // POST /api/v1/predict
@@ -72,7 +74,7 @@ Reviewed against seven baseline controls. Each is implemented or ruled out in wr
 | CORS restricted to known origins | Allowlist from configuration, wildcard rejected, and a test proves a disallowed origin is refused |
 | Backend validation | 29 typed fields with bounds and `extra: "forbid"`; `Amount` rejects rather than silently rounding |
 | Input sanitisation | Mostly N/A — no SQL, shell, templating or uploads. The live surface is artifact deserialisation, below |
-| Rate limiting | Per-IP, charged per transaction so batching cannot bypass it. **Proxy-blind and not per-account — [#16](../../issues/16)** |
+| Rate limiting | Per account, charged per transaction so batching cannot bypass it; `X-Forwarded-For` believed only from a configured proxy |
 | Row Level Security | **N/A** — no datastore, nothing stored. Re-evaluate on the PR that adds one |
 | Content Security Policy | Set on every response, verified with `curl` and in a browser |
 
@@ -81,8 +83,11 @@ service verifies a SHA-256 *before* unpickling and refuses on mismatch. The dige
 configuration, not from a file beside the artifact — a checksum an artifact-writer can also
 rewrite verifies nothing.
 
-**Not yet done:** there is **no authentication on any endpoint** ([#10](../../issues/10)). CORS
-restrains browsers, not `curl`. Do not expose this service publicly as it stands.
+**Authentication.** One API key per consumer, in `X-API-Key`, compared in constant time. Keys
+come from configuration and the service refuses to start outside development without them, so it
+cannot accidentally come up open. `/health` stays unauthenticated — a load balancer cannot
+present a credential. Why keys rather than JWTs or mTLS is recorded in
+[`docs/decisions/0002`](docs/decisions/0002-api-keys-for-authentication.md).
 
 ---
 

@@ -95,16 +95,13 @@ def test_predict_does_not_leak_exception_detail(
     assert "ValueError" not in response.text
 
 
-def test_retrain_accepts_and_queues_nothing(client: TestClient) -> None:
-    """Characterises CURRENT behaviour, which is a stub that reports success.
-
-    The endpoint returns 202 with "Retraining job queued" while queueing nothing, and
-    is unauthenticated. Both are issue #11 / #25. This test pins the response so that
-    fixing it is a deliberate change.
-    """
+def test_retrain_reports_that_it_is_not_implemented(client: TestClient) -> None:
+    """It previously returned 202 with "Retraining job queued" while queueing
+    nothing, so a caller — or a monitor built on that response — had no way to know
+    the work was never scheduled. 501 is the truthful answer."""
     response = client.post("/api/v1/retrain")
-    assert response.status_code == 202
-    assert response.json()["status"] == "accepted"
+    assert response.status_code == 501
+    assert "not implemented" in response.json()["detail"].lower()
 
 
 def test_unknown_route_is_404(client: TestClient) -> None:

@@ -9,9 +9,10 @@ import time
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 
 from app.api import metrics
-from app.api.dependencies import get_scorer
+from app.api.dependencies import get_scorer, require_consumer
+from app.core.auth import Consumer
 from app.core.config import settings
-from app.core.rate_limit import PREDICT_RATE_LIMIT, limiter
+from app.core.rate_limit import PREDICT_RATE_LIMIT, RETRAIN_RATE_LIMIT, limiter
 from app.ml.protocol import TransactionScorer
 from app.schemas.transaction import (
     BatchPredictionResponse,
@@ -72,6 +73,7 @@ def predict(
     request: Request,
     transaction: TransactionRequest,
     scorer: TransactionScorer = Depends(get_scorer),
+    consumer: Consumer = Depends(require_consumer),
 ) -> PredictionResponse:
     """
     Receives a single transaction and returns a fraud assessment.
@@ -120,6 +122,7 @@ def predict(
             "decision_threshold": result["decision_threshold"],
             "model_version": result["model_version"],
             "latency_ms": round(latency_ms, 1),
+            "consumer": consumer.name,
         },
     )
 
@@ -148,6 +151,7 @@ def predict_batch(
     request: Request,
     batch: BatchTransactionRequest,
     scorer: TransactionScorer = Depends(get_scorer),
+    consumer: Consumer = Depends(require_consumer),
 ) -> BatchPredictionResponse:
     """Score a batch, returning results in the submitted order.
 
@@ -184,6 +188,7 @@ def predict_batch(
             "latency_ms": round(latency_ms, 1),
             "latency_ms_per_transaction": round(latency_ms / len(results), 3),
             "model_version": results[0]["model_version"] if results else "",
+            "consumer": consumer.name,
         },
     )
 
@@ -196,26 +201,40 @@ def predict_batch(
 # ---------------------------------------------------------------------------------
 
 
-# A stub: it reports success without queueing anything, and requires no
-# authentication. Both are tracked in issue #11.
-# In production this would publish to a queue rather than doing the work synchronously.
+# Retraining is not implemented. The endpoint remains so the contract and its
+# protection exist before the behaviour does — an unauthenticated POST that starts
+# a real training run would be unbounded CPU, a rewritten artifact, and a direct
+# path to poisoning the model that scores production traffic.
 @router.post(
     "/retrain",
-    status_code=status.HTTP_202_ACCEPTED,
-    summary="Trigger model retraining",
+    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+    summary="Trigger model retraining (not implemented)",
+    responses={
+        401: {"model": ErrorResponse, "description": "Missing or invalid API key"},
+        501: {"model": ErrorResponse, "description": "Retraining is not implemented"},
+    },
 )
-def retrain() -> dict[str, str]:
+@limiter.limit(RETRAIN_RATE_LIMIT)
+def retrain(
+    request: Request,
+    consumer: Consumer = Depends(require_consumer),
+) -> None:
+    """Report honestly that retraining does not happen here.
+
+    This previously returned 202 with "Retraining job queued" while queueing
+    nothing. A caller — or a monitor built on it — had no way to know the work was
+    never scheduled. 501 is the truthful answer: the endpoint is recognised and
+    deliberately unimplemented.
+
+    When it is implemented it must be asynchronous, publishing to a queue rather
+    than training in the request, and idempotent enough that a repeated call does
+    not start a second concurrent run.
     """
-    Placeholder for the retraining pipeline.
-    In production this would publish a message to a queue (SQS, Celery)
-    and return immediately — retraining is never synchronous in a live API.
-    Returns 202 Accepted because the work happens asynchronously.
-    """
-    logger.info("Retraining requested")
-    return {
-        "message": "Retraining job queued.",
-        "status": "accepted",
-    }
+    logger.warning("retrain requested but not implemented", extra={"consumer": consumer.name})
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="Retraining is not implemented. Train offline with notebooks/train.py.",
+    )
 
 
 # ---------------------------------------------------------------------------------

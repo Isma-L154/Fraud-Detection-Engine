@@ -12,12 +12,12 @@ import joblib
 import pytest
 from pydantic import ValidationError
 
-from app.core.config import Settings
 from app.core.integrity import ArtifactIntegrityError, sha256_of, verify
 from app.ml import model as model_module
 from app.ml.model import FraudDetectionModel
 
 from .conftest import FakePipeline
+from .factories import deployed_settings, development_settings
 
 
 @pytest.fixture
@@ -117,17 +117,13 @@ def test_development_loads_without_a_digest_but_warns(
 @pytest.mark.parametrize("env", ["staging", "production"])
 def test_settings_refuse_to_build_without_a_digest_outside_development(env: str) -> None:
     with pytest.raises(ValidationError, match="model_sha256 is required"):
-        Settings(
-            env=env,
-            cors_origins=["https://app.example.com"],
-            metrics_token="t" * 32,
-            _env_file=None,
-        )
+        deployed_settings(env=env, model_sha256=None)
 
 
 def test_development_settings_build_without_a_digest() -> None:
-    settings = Settings(env="development", cors_origins=["http://localhost:3000"], _env_file=None)
-    assert settings.model_sha256 is None
+    """Development is exempt: the artifact there is produced by the person running
+    the service, on the machine running it, so there is no transport to protect."""
+    assert development_settings().model_sha256 is None
 
 
 def test_a_crafted_artifact_would_execute_on_load(tmp_path: Path) -> None:

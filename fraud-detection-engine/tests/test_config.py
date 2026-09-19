@@ -14,13 +14,15 @@ from app.core.config import Settings
 
 # A digest is required whenever env is not development, so the shared base carries
 # one. The tests that assert that requirement build their Settings explicitly.
-DIGEST = "b8" + "0" * 62
-TOKEN = "t" * 32
+from .factories import API_KEY, CONSUMER, DIGEST, METRICS_TOKEN
+
+TOKEN = METRICS_TOKEN
 BASE = {
     "env": "production",
     "cors_origins": ["https://app.example.com"],
     "model_sha256": DIGEST,
-    "metrics_token": TOKEN,
+    "metrics_token": METRICS_TOKEN,
+    "api_keys": {CONSUMER: API_KEY},
 }
 
 
@@ -44,19 +46,14 @@ def test_fails_without_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """ENV has no default. An unset value must stop the process, not be assumed."""
     monkeypatch.delenv("ENV", raising=False)
     with pytest.raises(ValidationError) as exc:
-        Settings(
-            cors_origins=["https://app.example.com"],
-            model_sha256=DIGEST,
-            metrics_token=TOKEN,
-            _env_file=None,
-        )  # type: ignore[call-arg]
+        Settings(**{k: v for k, v in BASE.items() if k != "env"}, _env_file=None)  # type: ignore[call-arg]
     assert "env" in str(exc.value).lower()
 
 
 def test_fails_without_cors_origins(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("CORS_ORIGINS", raising=False)
     with pytest.raises(ValidationError):
-        Settings(env="production", model_sha256=DIGEST, metrics_token=TOKEN, _env_file=None)  # type: ignore[call-arg]
+        Settings(**{k: v for k, v in BASE.items() if k != "cors_origins"}, _env_file=None)  # type: ignore[call-arg]
 
 
 @pytest.mark.parametrize("value", ["Development", "prod", "dev", "", "PRODUCTION"])
@@ -91,7 +88,12 @@ def test_rejects_an_unknown_setting() -> None:
 
 
 def test_docs_are_served_in_development_only() -> None:
-    assert _settings(env="development", model_sha256=None, metrics_token=None).docs_enabled is True
+    assert (
+        _settings(
+            env="development", model_sha256=None, metrics_token=None, api_keys={}
+        ).docs_enabled
+        is True
+    )
     assert _settings(env="staging").docs_enabled is False
     assert _settings(env="production").docs_enabled is False
 
@@ -108,7 +110,10 @@ def test_model_path_can_be_overridden() -> None:
 
 def test_log_format_defaults_by_environment() -> None:
     """Text where a human reads it, JSON where an aggregator does."""
-    assert _settings(env="development", model_sha256=None, metrics_token=None).json_logs is False
+    assert (
+        _settings(env="development", model_sha256=None, metrics_token=None, api_keys={}).json_logs
+        is False
+    )
     assert _settings(env="staging").json_logs is True
     assert _settings(env="production").json_logs is True
 

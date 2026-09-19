@@ -79,7 +79,9 @@ def test_a_body_just_under_the_limit_is_not_rejected_by_the_limiter(
 @pytest.mark.parametrize("path", ["/api/v1/health", "/api/v1/retrain"])
 def test_other_endpoints_still_work(client: TestClient, path: str) -> None:
     method = client.get if path.endswith("health") else client.post
-    assert method(path).status_code in (200, 202)
+    # /retrain answers 501 by design (#11); what matters here is that the size
+    # limit did not swallow the request.
+    assert method(path).status_code in (200, 501)
 
 
 def test_the_413_response_carries_security_headers(client: TestClient) -> None:

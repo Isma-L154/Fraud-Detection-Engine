@@ -66,6 +66,26 @@ class Settings(BaseSettings):
 
     predict_rate_limit: str = "30/minute"
 
+    retrain_rate_limit: str = Field(
+        "2/hour",
+        description=(
+            "Much stricter than prediction. Retraining is the expensive path — "
+            "unbounded CPU and a rewritten artifact — and nobody legitimately "
+            "triggers it often."
+        ),
+    )
+
+    trusted_proxies: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Peer addresses whose X-Forwarded-For header is believed. Empty by "
+            "default: that header is client-controlled, so trusting it without "
+            "knowing the request came through a real proxy lets anyone spoof an "
+            "address per request and never be rate limited. Set this to the reverse "
+            "proxy or load balancer addresses when one exists."
+        ),
+    )
+
     max_batch_size: int = Field(
         100,
         gt=0,
@@ -115,6 +135,37 @@ class Settings(BaseSettings):
             "rewrite that too. `python notebooks/train.py` prints the value."
         ),
     )
+
+    api_keys: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "Consumer name -> API key. One key per consumer so a key can be revoked "
+            "without affecting the others, and so the rate limiter has an identity "
+            "to key on. Required outside development: the service would otherwise "
+            "serve anyone who can reach the port. Example: "
+            'API_KEYS={"settlement-batch":"<32+ chars>"}'
+        ),
+    )
+
+    @field_validator("api_keys")
+    @classmethod
+    def reject_weak_api_keys(cls, keys: dict[str, str]) -> dict[str, str]:
+        """A guessable key is not a control, and a shared one cannot be revoked."""
+        for name, key in keys.items():
+            if len(key) < 32:
+                raise ValueError(f"api key for '{name}' is shorter than 32 characters")
+        if len(set(keys.values())) != len(keys):
+            raise ValueError("api keys must be unique per consumer")
+        return keys
+
+    @model_validator(mode="after")
+    def require_api_keys_outside_development(self) -> "Settings":
+        if self.env != "development" and not self.api_keys:
+            raise ValueError(
+                "api_keys is required when env is not 'development' — "
+                "without it every endpoint is open to anyone who can reach the port"
+            )
+        return self
 
     metrics_token: str | None = Field(
         None,

@@ -5,7 +5,9 @@ from fastapi.testclient import TestClient
 from prometheus_client import CONTENT_TYPE_LATEST
 from pydantic import ValidationError
 
-from app.core.config import Settings, settings
+from app.core.config import settings
+
+from .factories import deployed_settings
 
 
 def _scrape(client: TestClient) -> str:
@@ -95,21 +97,10 @@ def test_the_401_does_not_leak_metrics(client: TestClient, monkeypatch: pytest.M
 @pytest.mark.parametrize("env", ["staging", "production"])
 def test_settings_require_a_metrics_token_outside_development(env: str) -> None:
     with pytest.raises(ValidationError, match="metrics_token is required"):
-        Settings(
-            env=env,
-            cors_origins=["https://app.example.com"],
-            model_sha256="b8" + "0" * 62,
-            _env_file=None,
-        )
+        deployed_settings(env=env, metrics_token=None)
 
 
 def test_a_short_metrics_token_is_rejected() -> None:
     """A guessable token is not a control."""
     with pytest.raises(ValidationError):
-        Settings(
-            env="production",
-            cors_origins=["https://app.example.com"],
-            model_sha256="b8" + "0" * 62,
-            metrics_token="short",
-            _env_file=None,
-        )
+        deployed_settings(metrics_token="short")
