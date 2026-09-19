@@ -41,6 +41,7 @@ USER appuser
 #   ENV=production|staging|development
 #   CORS_ORIGINS=["https://your-origin"]
 #   MODEL_SHA256=<sha-256 of models/fraud_model.pkl>  (required outside development)
+#   METRICS_TOKEN=<>=16 chars>                        (required outside development)
 
 # Document the port — doesn't actually publish it, just metadata
 EXPOSE 8000
@@ -49,4 +50,10 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"
 
-CMD ["uvicorn", "app.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# One worker, not two. prometheus_client keeps counters in process memory, so two
+# workers behind one port serve two different halves of the truth depending on
+# which one a scrape reaches (#22). The alternative is prometheus multiprocess
+# mode, which needs a shared directory and cannot observe a worker that died.
+# One worker per container scaled with replicas is simpler, gives correct metrics,
+# and is the usual container practice.
+CMD ["uvicorn", "app.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

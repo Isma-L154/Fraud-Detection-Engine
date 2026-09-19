@@ -3,11 +3,14 @@
 # model loader. This is the controller layer.
 
 import logging
+import secrets
 import time
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 
+from app.api import metrics
 from app.api.dependencies import get_scorer
+from app.core.config import settings
 from app.core.rate_limit import PREDICT_RATE_LIMIT, limiter
 from app.ml.protocol import TransactionScorer
 from app.schemas.transaction import (
@@ -81,7 +84,8 @@ def predict(
     start_time = time.perf_counter()
 
     try:
-        result = scorer.predict(transaction.model_dump())
+        with metrics.PREDICTION_DURATION.time():
+            result = scorer.predict(transaction.model_dump())
     except Exception as e:
         # Log the full error internally but never expose raw exception messages to the client
         # (Because they could contain sensitive info or be exploited by attackers)
@@ -111,6 +115,8 @@ def predict(
         },
     )
 
+    metrics.PREDICTIONS.labels(result["risk_level"], str(result["is_fraud"]).lower()).inc()
+
     return PredictionResponse(**result)
 
 
@@ -137,3 +143,34 @@ def retrain() -> dict[str, str]:
         "message": "Retraining job queued.",
         "status": "accepted",
     }
+
+
+# ---------------------------------------------------------------------------------
+
+
+@router.get(
+    "/metrics",
+    summary="Prometheus metrics",
+    include_in_schema=False,  # internal telemetry, not part of the public contract
+)
+def prometheus_metrics(authorization: str = Header(default="")) -> Response:
+    """Exposition endpoint for a scraper.
+
+    Requires a bearer token outside development. Traffic volume, latency
+    distribution and the fraud rate are all commercially sensitive, and a public
+    /metrics hands them to anyone.
+    """
+    expected = settings.metrics_token
+    if expected:
+        presented = authorization.removeprefix("Bearer ").strip()
+        # compare_digest rather than ==: a plain comparison on a secret leaks its
+        # length and prefix through timing.
+        if not secrets.compare_digest(presented, expected):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Not authorised.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+    payload, content_type = metrics.render()
+    return Response(content=payload, media_type=content_type)

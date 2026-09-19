@@ -11,6 +11,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.api.body_limit import BodySizeLimitMiddleware
+from app.api.metrics import MODEL_INFO, MODEL_LOADED, MetricsMiddleware
 from app.api.middleware import SecurityHeadersMiddleware
 from app.api.request_id import RequestIdMiddleware
 from app.api.routes import router
@@ -36,10 +37,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     scorer = FraudDetectionModel()
     scorer.load()
     app.state.scorer = scorer
+    MODEL_LOADED.set(1 if scorer.is_loaded else 0)
+    MODEL_INFO.labels(version=scorer.version).set(1)
     logger.info("Model ready. Accepting requests.")
 
     yield  # app is running and serving requests here
 
+    MODEL_LOADED.set(0)
     logger.info("Shutting down.")
 
 
@@ -66,6 +70,9 @@ app.add_middleware(SecurityHeadersMiddleware, settings=settings)
 # Correlation id, inside the size limit but outside everything that logs, so every
 # line emitted while handling a request carries the same id.
 app.add_middleware(RequestIdMiddleware)
+
+# Inside the request id so metrics see the final status code of every response.
+app.add_middleware(MetricsMiddleware)
 
 # Added last so it wraps everything else: an oversized body must be refused before
 # any other middleware or handler has had to hold it in memory.
