@@ -13,15 +13,16 @@ class TransactionRequest(BaseModel):
     V1-V28 are PCA-anonymized features from the original dataset.
     We enforce realistic bounds to reject obviously corrupted inputs.
     """
-    V1:  float = Field(..., ge=-30, le=30)
-    V2:  float = Field(..., ge=-30, le=30)
-    V3:  float = Field(..., ge=-30, le=30)
-    V4:  float = Field(..., ge=-30, le=30)
-    V5:  float = Field(..., ge=-30, le=30)
-    V6:  float = Field(..., ge=-30, le=30)
-    V7:  float = Field(..., ge=-30, le=30)
-    V8:  float = Field(..., ge=-30, le=30)
-    V9:  float = Field(..., ge=-30, le=30)
+
+    V1: float = Field(..., ge=-30, le=30)
+    V2: float = Field(..., ge=-30, le=30)
+    V3: float = Field(..., ge=-30, le=30)
+    V4: float = Field(..., ge=-30, le=30)
+    V5: float = Field(..., ge=-30, le=30)
+    V6: float = Field(..., ge=-30, le=30)
+    V7: float = Field(..., ge=-30, le=30)
+    V8: float = Field(..., ge=-30, le=30)
+    V9: float = Field(..., ge=-30, le=30)
     V10: float = Field(..., ge=-30, le=30)
     V11: float = Field(..., ge=-30, le=30)
     V12: float = Field(..., ge=-30, le=30)
@@ -86,9 +87,9 @@ class TransactionRequest(BaseModel):
                 "V26": -0.189114843888824,
                 "V27": 0.133558376740387,
                 "V28": -0.0210530534538215,
-                "Amount": 149.62
+                "Amount": 149.62,
             }
-        }
+        },
     }
 
 
@@ -98,10 +99,11 @@ class PredictionResponse(BaseModel):
     Keeping the response explicit prevents accidentally leaking
     internal model details in the future.
     """
-    is_fraud: bool                    # binary decision
-    fraud_probability: float          # model confidence (0.0 - 1.0)
-    risk_level: str                   # human-readable: LOW / MEDIUM / HIGH
-    model_version: str                # tracks which model artifact made this call
+
+    is_fraud: bool  # binary decision
+    fraud_probability: float  # model confidence (0.0 - 1.0)
+    risk_level: str  # human-readable: LOW / MEDIUM / HIGH
+    model_version: str  # tracks which model artifact made this call
 
 
 class HealthResponse(BaseModel):
