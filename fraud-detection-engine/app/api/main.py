@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
+from app.api.body_limit import BodySizeLimitMiddleware
 from app.api.middleware import SecurityHeadersMiddleware
 from app.api.routes import router
 from app.core.config import settings
@@ -60,6 +61,10 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # ty
 # Security headers on every response, added before CORS so it runs outermost and
 # cannot be skipped by a response short-circuited further in.
 app.add_middleware(SecurityHeadersMiddleware, settings=settings)
+
+# Added last so it wraps everything else: an oversized body must be refused before
+# any other middleware or handler has had to hold it in memory.
+app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_request_bytes)
 
 # Origins come from configuration so staging and production differ without a code
 # change. CORS restrains browsers, not curl — it is never authorisation (#12).

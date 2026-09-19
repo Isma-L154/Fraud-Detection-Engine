@@ -52,9 +52,7 @@ def test_verify_rejects_a_tampered_artifact(artifact: Path) -> None:
     assert "Refusing to load" in str(exc.value)
 
 
-def test_load_refuses_a_tampered_artifact(
-    monkeypatch: pytest.MonkeyPatch, artifact: Path
-) -> None:
+def test_load_refuses_a_tampered_artifact(monkeypatch: pytest.MonkeyPatch, artifact: Path) -> None:
     """The service-level path: startup must fail, not warn and continue."""
     expected = sha256_of(artifact)
     artifact.write_bytes(b"different bytes entirely")

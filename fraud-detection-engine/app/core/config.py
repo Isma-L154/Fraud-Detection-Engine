@@ -57,6 +57,17 @@ class Settings(BaseSettings):
 
     predict_rate_limit: str = "30/minute"
 
+    max_request_bytes: int = Field(
+        16 * 1024,
+        gt=0,
+        description=(
+            "Largest request body accepted, in bytes. A valid /predict payload is "
+            "about 709 bytes, so 16 KiB leaves ample headroom while keeping an "
+            "unauthenticated request from costing more memory than the work it asks "
+            "for. Raise it deliberately when the batch endpoint lands (#26)."
+        ),
+    )
+
     decision_threshold: float = Field(
         0.30,
         ge=0.0,
