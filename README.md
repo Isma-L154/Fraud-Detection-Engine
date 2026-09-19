@@ -127,6 +127,28 @@ imports: `requirements.txt` (runtime), `requirements-train.txt` (adds MLflow for
 `notebooks/train.py`), `requirements-dev.txt` (adds linting, types and tests). Each includes
 the one before it.
 
+### From clone to a served prediction
+
+No Kaggle account and no 150 MB download needed to check the pipeline runs:
+
+```bash
+pip install -r requirements-dev.txt
+cp .env.example .env                        # fill in ENV and CORS_ORIGINS
+python scripts/make_sample_dataset.py       # synthetic data, same schema
+python notebooks/train.py                   # prints MODEL_VERSION and MODEL_SHA256
+uvicorn app.api.main:app --port 8000
+```
+
+The model that produces is **not meaningful** — the sample is noise with a planted signal, and
+the artifact records which dataset trained it so this is visible rather than assumed. For a real
+model, fetch the real data first:
+
+```bash
+python scripts/fetch_dataset.py             # Kaggle CLI, or prints manual steps
+```
+
+### Commands
+
 ```bash
 # Install runtime + training + development tooling
 pip install -r requirements-dev.txt
