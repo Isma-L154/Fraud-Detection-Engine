@@ -6,7 +6,7 @@ FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
-# Copy requirements first 
+# Copy requirements first
 # If requirements.txt doesn't change, Docker skips pip install on rebuild.
 
 COPY requirements.txt .

@@ -21,6 +21,9 @@ repos:
     hooks:
       - id: end-of-file-fixer
       - id: trailing-whitespace
+        # Two trailing spaces are a hard line break in Markdown, not stray
+        # whitespace. Stripping them silently changes how the document renders.
+        exclude: \.md$
       - id: check-yaml
       - id: check-added-large-files
         # The model artifact is 3.5 MB and the dataset is 150 MB. Neither belongs
@@ -29,11 +32,21 @@ repos:
       - id: detect-private-key
       - id: check-merge-conflict
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v2.3.1
+  # mypy runs as a local hook, against the project's own virtualenv, rather than
+  # the mirrors-mypy repo. That hook builds an isolated environment which would
+  # need every runtime dependency duplicated into additional_dependencies — and
+  # when they drift, it reports errors that do not reproduce locally (a missing
+  # pandas-stubs, an "unused type: ignore" for a library it cannot see).
+  - repo: local
     hooks:
       - id: mypy
         name: mypy (app/)
+        # Resolved from PATH, so the project virtualenv must be active. That is
+        # already required to run the app or the tests.
+        # The path is explicit because pre-commit runs from the repository root
+        # while pyproject.toml's `files = ["app"]` is relative to the project dir.
+        # An explicit target overrides that setting.
+        entry: mypy --config-file=fraud-detection-engine/pyproject.toml fraud-detection-engine/app
+        language: system
+        pass_filenames: false
         files: ^fraud-detection-engine/app/
-        args: [--config-file=fraud-detection-engine/pyproject.toml]
-        additional_dependencies: [pydantic==2.9.2, fastapi==0.115.3]
