@@ -1,0 +1,9 @@
+# Development-only tooling. Deliberately separate from requirements.txt so the
+# Docker image never installs it — the runtime has no use for a linter.
+# Splitting the runtime and training dependencies apart is issue #9.
+
+-r requirements.txt
+
+ruff==0.16.8
+mypy==2.3.1
+pre-commit==4.6.2
