@@ -1,6 +1,7 @@
 # Singleton model loader. The pipeline is loaded once at startup and reused
 # across all requests. Never load from disk inside a request handler.
-# (I used Singleton pattern here, helps me save memory and speed up inference by reusing the same model instance across requests.)
+# A single shared instance keeps the pipeline in memory across requests instead of
+# deserialising a 3.5 MB artifact on each one.
 
 import logging
 from pathlib import Path
@@ -23,7 +24,8 @@ MODEL_PATH = PROJECT_ROOT / "models" / "fraud_model.pkl"
 MODEL_VERSION = "1.0.0"
 
 # Thresholds that map a raw probability score to a human-readable risk level.
-#(I decided to put these, cause these are business rules that might change independently of the model. )
+# These are business rules and change independently of the model. Decoupling the
+# decision threshold from these buckets is issue #17.
 RISK_THRESHOLDS = {
     "LOW":    0.30,
     "MEDIUM": 0.70,

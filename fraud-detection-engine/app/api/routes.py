@@ -1,5 +1,6 @@
-# API route definitions. Each handler is intentionally thin and only responsible for request validation and response formatting.
-# Validation lives in Pydantic, business logic lives in the model loader. THIS IS THE "CONTROLLER" LAYER OF THE APPLICATION.
+# API route definitions. Each handler is intentionally thin: request validation and
+# response formatting only. Validation lives in Pydantic, business logic lives in the
+# model loader. This is the controller layer.
 
 import logging
 import time
@@ -39,7 +40,7 @@ def health_check():
 
 #---------------------------------------------------------------------------------
 
-# This is the main endpoint for fraud prediction. It expects a JSON payload that matches the TransactionRequest schema.
+# The main fraud prediction endpoint. Expects a JSON body matching TransactionRequest.
 @router.post(
     "/predict",
     response_model=PredictionResponse,
@@ -62,7 +63,8 @@ def predict(request: Request, transaction: TransactionRequest):
     handler that does not accept one.
     """
     if not fraud_model.is_loaded:
-        # This shouldn't happen in normal operation but guards against edge cases where the model failed to load at startup
+        # Should not happen in normal operation, but guards the case where the model
+        # failed to load at startup.
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Model is not available. Try again later.",
@@ -75,10 +77,12 @@ def predict(request: Request, transaction: TransactionRequest):
         # Log the full error internally but never expose raw exception messages to the client
         # (Because they could contain sensitive info or be exploited by attackers)
         logger.error(f"Prediction failed: {e}", exc_info=True)
+        # `from e` keeps the original traceback chained for the logs without putting
+        # any of it in the response.
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Prediction failed. The error has been logged.",
-        )
+        ) from e
 
     latency_ms = (time.perf_counter() - start_time) * 1000
     logger.info(
@@ -91,7 +95,7 @@ def predict(request: Request, transaction: TransactionRequest):
 #---------------------------------------------------------------------------------
 
 # This endpoint is a placeholder for triggering model retraining
-# (This methods helps in the future when we want to implement a retraining pipeline. In production, this would likely publish a message to a queue rather than doing the work synchronously.)
+# In production this would publish to a queue rather than doing the work synchronously.
 @router.post(
     "/retrain",
     status_code=status.HTTP_202_ACCEPTED,
