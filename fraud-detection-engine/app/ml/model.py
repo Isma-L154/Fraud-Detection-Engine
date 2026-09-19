@@ -4,22 +4,19 @@
 # deserialising a 3.5 MB artifact on each one.
 
 import logging
-from pathlib import Path
 from typing import Any
 
 import joblib
 import pandas as pd
 
+from app.core.config import PROJECT_ROOT, settings
+
 logger = logging.getLogger(__name__)
 
-# Canonical path to the model artifact.
-#
-# Resolved from this file's location, not from the process working directory.
-# A bare relative path meant the service only started when launched from
-# fraud-detection-engine/ — anywhere else it raised FileNotFoundError pointing at
-# a path that looked correct. parents[2] walks app/ml/model.py up to the project root.
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-MODEL_PATH = PROJECT_ROOT / "models" / "fraud_model.pkl"
+# Canonical path to the model artifact, from configuration. Its default resolves
+# from the package location rather than the process working directory, so the
+# service starts from any directory (#19).
+MODEL_PATH = settings.model_path
 
 # Version tag injected into every prediction response.
 MODEL_VERSION = "1.0.0"

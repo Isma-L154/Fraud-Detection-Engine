@@ -8,9 +8,10 @@
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-# Per-endpoint limits. These are literals until configuration lands; see issue #6.
+from app.core.config import settings
+
 # get_remote_address keys on the socket peer, which is wrong behind a proxy —
 # tracked separately in issue #16.
-PREDICT_RATE_LIMIT = "30/minute"
+PREDICT_RATE_LIMIT = settings.predict_rate_limit
 
 limiter = Limiter(key_func=get_remote_address)

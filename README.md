@@ -126,6 +126,10 @@ All commands run from `fraud-detection-engine/`, with the virtualenv active.
 # Install runtime + development tooling
 pip install -r requirements-dev.txt
 
+# Configure. ENV and CORS_ORIGINS are required — the app refuses to start
+# without them rather than assuming a default.
+cp .env.example .env    # then fill it in
+
 # Tests
 pytest                                    # run the suite
 pytest --cov                              # with a coverage report

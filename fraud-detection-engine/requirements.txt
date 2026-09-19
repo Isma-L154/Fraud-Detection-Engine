@@ -10,3 +10,4 @@ evidently==0.4.33
 prometheus-client==0.21.0
 python-dotenv==1.0.1
 slowapi==0.1.9
+pydantic-settings==2.15.0

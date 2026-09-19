@@ -35,6 +35,12 @@ COPY models/ ./models/
 # Switch to non-root before the app starts
 USER appuser
 
+# Required configuration. The application refuses to start without these, by
+# design — an unset ENV used to be treated as production silently. Supply them at
+# `docker run` (-e) or in the orchestrator; see .env.example for the full list.
+#   ENV=production|staging|development
+#   CORS_ORIGINS=["https://your-origin"]
+
 # Document the port — doesn't actually publish it, just metadata
 EXPOSE 8000
 

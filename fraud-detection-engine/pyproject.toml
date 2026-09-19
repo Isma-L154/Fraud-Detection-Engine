@@ -50,9 +50,12 @@ quote-style = "double"
 [tool.mypy]
 python_version = "3.11"
 files = ["app"]
+# pydantic's plugin teaches mypy about model and settings constructors. Without it,
+# Settings() reads as "missing required arguments" even though pydantic-settings
+# populates those fields from the environment.
+plugins = ["pydantic.mypy"]
 
-# Started at the strictness the existing code already supports. The three flags
-# below are the ones that would currently fail; tighten them as the code allows
+# The strictness the code currently satisfies. Tighten further as it allows,
 # rather than leaving mypy permanently disabled on real findings.
 warn_unused_configs = true
 warn_redundant_casts = true

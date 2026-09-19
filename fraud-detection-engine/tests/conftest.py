@@ -8,8 +8,15 @@ that lands, these fixtures collapse into `app.dependency_overrides`.
 No test here loads the real 3.5 MB artifact.
 """
 
+import os
 from collections.abc import Iterator
 from typing import Any
+
+# Set before anything imports app.core.config, which instantiates Settings at import
+# and would otherwise fail here exactly as it would in production with no ENV set.
+# setdefault, not assignment, so a deliberate value from the environment still wins.
+os.environ.setdefault("ENV", "development")
+os.environ.setdefault("CORS_ORIGINS", '["http://localhost:3000"]')
 
 import pytest
 from fastapi.testclient import TestClient

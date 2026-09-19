@@ -2,8 +2,6 @@
 # This is the entry point that uvicorn runs.
 
 import logging
-import logging.config
-import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -13,24 +11,12 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.api.routes import router
+from app.core.config import settings
+from app.core.logging import configure_logging
 from app.core.rate_limit import limiter
 from app.ml.model import fraud_model
 
-# Structured logging config — outputs consistent format across all modules
-logging.config.dictConfig(
-    {
-        "version": 1,
-        "disable_existing_loggers": False,
-        "formatters": {
-            "default": {
-                "format": "%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-                "datefmt": "%Y-%m-%d %H:%M:%S",
-            }
-        },
-        "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "default"}},
-        "root": {"level": "INFO", "handlers": ["console"]},
-    }
-)
+configure_logging(settings.log_level)
 logger = logging.getLogger(__name__)
 
 
@@ -42,7 +28,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     arrives — never load it lazily inside a request handler.
     """
     # Startup
-    logger.info("Starting up — loading model...")
+    logger.info("Starting up in %s — loading model...", settings.env)
     fraud_model.load()
     logger.info("Model ready. Accepting requests.")
 
@@ -56,8 +42,8 @@ app = FastAPI(
     description="Real-time credit card fraud detection API",
     version="1.0.0",
     lifespan=lifespan,
-    docs_url="/docs" if os.getenv("ENV") == "development" else None,
-    redoc_url="/redoc" if os.getenv("ENV") == "development" else None,
+    docs_url="/docs" if settings.docs_enabled else None,
+    redoc_url="/redoc" if settings.docs_enabled else None,
 )
 
 # slowapi reads the limiter off app.state at request time, so this has to happen
@@ -67,10 +53,11 @@ app.state.limiter = limiter
 # is narrower than Starlette's signature. The call is correct at runtime.
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
-# CORS middleware — adjust origins as needed for your frontend
+# Origins come from configuration so staging and production differ without a code
+# change. CORS restrains browsers, not curl — it is never authorisation (#12).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://98.90.203.9:8000"],
+    allow_origins=settings.cors_origins,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
