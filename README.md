@@ -42,6 +42,7 @@ The API exposes three main endpoints:
 |--------|----------|--------|
 | GET | `/api/v1/health` | Check service and model status |
 | POST | `/api/v1/predict` | Evaluate a transaction |
+| POST | `/api/v1/predict/batch` | Evaluate up to 100 transactions in one request |
 | POST | `/api/v1/retrain` | Trigger model retraining |
 
 ### Prediction Flow

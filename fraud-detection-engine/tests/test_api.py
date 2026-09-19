@@ -177,6 +177,9 @@ def test_a_completely_different_scorer_can_be_substituted(
                 "decision_threshold": 0.0,
             }
 
+        def predict_many(self, rows: list[dict[str, float]]) -> list[dict[str, object]]:
+            return [self.predict(row) for row in rows]
+
     stub = AlwaysFraud()
     assert isinstance(stub, TransactionScorer), "the stub must satisfy the protocol"
 

@@ -26,3 +26,7 @@ class TransactionScorer(Protocol):
     def predict(self, features: dict[str, float]) -> dict[str, Any]:
         """Score one transaction."""
         ...
+
+    def predict_many(self, rows: list[dict[str, float]]) -> list[dict[str, Any]]:
+        """Score several transactions, returning results in input order."""
+        ...

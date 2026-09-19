@@ -10,6 +10,8 @@ import os
 from collections.abc import Iterator
 from typing import Any
 
+import numpy as np
+
 # Set before anything imports app.core.config, which instantiates Settings at import
 # and would otherwise fail here exactly as it would in production with no ENV set.
 # setdefault, not assignment, so a deliberate value from the environment still wins.
@@ -25,24 +27,28 @@ from app.ml.model import FraudDetectionModel
 class FakePipeline:
     """Stands in for the trained sklearn Pipeline.
 
-    Only `predict_proba` is used by FraudDetectionModel, and only column 1 of the
-    first row is read. The probability is settable so a test can place a prediction
-    in any risk bucket.
+    Only `predict_proba` is used by FraudDetectionModel, which reads column 1 of
+    every row. The probability is settable so a test can place a prediction in any
+    risk bucket.
     """
 
     def __init__(self, fraud_probability: float = 0.0) -> None:
         self.fraud_probability = fraud_probability
         self.calls: list[Any] = []
 
-    def predict_proba(self, X: Any) -> list[list[float]]:
+    def predict_proba(self, X: Any) -> "np.ndarray[Any, Any]":
+        # One row out per row in, as an array — the real pipeline returns an ndarray
+        # the caller slices with [:, 1]. A list-of-one-row stand-in passed while the
+        # code only ever scored single rows and would have hidden the batch path.
         self.calls.append(X)
-        return [[1.0 - self.fraud_probability, self.fraud_probability]]
+        p = self.fraud_probability
+        return np.array([[1.0 - p, p]] * len(X))
 
 
 class ExplodingPipeline:
     """Raises on inference, to exercise the 500 path in the predict handler."""
 
-    def predict_proba(self, X: Any) -> list[list[float]]:
+    def predict_proba(self, X: Any) -> "np.ndarray[Any, Any]":
         raise ValueError("synthetic inference failure")
 
 

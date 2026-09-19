@@ -16,6 +16,11 @@ from app.ml.artifact import UNKNOWN_VERSION, ArtifactMetadata, unpack
 
 logger = logging.getLogger(__name__)
 
+# Column order is load-bearing: the pipeline was fitted on V1..V28 then Amount, and
+# a frame built in any other order scores the wrong feature against the wrong
+# weight — silently, with no exception.
+FEATURE_COLUMNS = [f"V{i}" for i in range(1, 29)] + ["Amount"]
+
 # Canonical path to the model artifact, from configuration. Its default resolves
 # from the package location rather than the process working directory, so the
 # service starts from any directory (#19).
@@ -108,19 +113,34 @@ class FraudDetectionModel:
         Returns:
             dict with is_fraud, fraud_probability, risk_level, model_version
         """
+        return self.predict_many([features])[0]
+
+    def predict_many(self, rows: list[dict[str, float]]) -> list[dict[str, Any]]:
+        """Score several transactions in one pass.
+
+        sklearn's per-call overhead is large relative to scoring one row, so N rows
+        in one array is materially cheaper than N separate calls. predict()
+        delegates here, so there is exactly one place that builds the frame, runs
+        inference and maps a probability to a result.
+
+        Results are returned in input order.
+        """
         # Checked against _pipeline rather than the is_loaded property so the type
         # checker narrows it for the predict_proba call below.
         if self._pipeline is None:
             raise RuntimeError("Model is not loaded. Call load() before predict().")
+        if not rows:
+            return []
 
-        # Build a single-row DataFrame preserving feature column order.
-        feature_columns = [f"V{i}" for i in range(1, 29)] + ["Amount"]
-        X = pd.DataFrame([features])[feature_columns]
+        X = pd.DataFrame(rows)[FEATURE_COLUMNS]
 
-        # predict_proba returns [[prob_legit, prob_fraud]]
-        # We only need the fraud probability — index 1
-        fraud_probability = float(self._pipeline.predict_proba(X)[0][1])
+        # predict_proba returns one [prob_legit, prob_fraud] pair per row; column 1
+        # is the fraud probability.
+        probabilities = self._pipeline.predict_proba(X)[:, 1]
 
+        return [self._as_result(float(p)) for p in probabilities]
+
+    def _as_result(self, fraud_probability: float) -> dict[str, Any]:
         return {
             "is_fraud": fraud_probability >= settings.decision_threshold,
             "fraud_probability": round(fraud_probability, 4),

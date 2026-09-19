@@ -66,8 +66,20 @@ class Settings(BaseSettings):
 
     predict_rate_limit: str = "30/minute"
 
+    max_batch_size: int = Field(
+        100,
+        gt=0,
+        le=1000,
+        description=(
+            "Largest batch accepted by /predict/batch. An unbounded batch is a "
+            "denial-of-service vector: inference is CPU-bound, so one request could "
+            "occupy a worker indefinitely. Raising it means raising "
+            "max_request_bytes too — 100 transactions is roughly 70 KB."
+        ),
+    )
+
     max_request_bytes: int = Field(
-        16 * 1024,
+        128 * 1024,
         gt=0,
         description=(
             "Largest request body accepted, in bytes. A valid /predict payload is "
