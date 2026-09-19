@@ -8,6 +8,7 @@ __pycache__/
 
 #ML Runs
 */notebooks/creditcard.csv
+*/notebooks/creditcard_sample.csv
 fraud-detection-engine/models/*.pkl
 mlruns/
 mlflow.db

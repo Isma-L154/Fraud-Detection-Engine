@@ -1,6 +1,7 @@
 # Trains a fraud detection pipeline and logs the run to MLflow.
 # Output: models/fraud_model.pkl (scaler + classifier bundled together)
 
+import argparse
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -25,15 +26,41 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATASET_PATH = PROJECT_ROOT / "notebooks" / "creditcard.csv"
 MODEL_PATH = PROJECT_ROOT / "models" / "fraud_model.pkl"
 
-mlflow.set_experiment("fraud-detection")
+SAMPLE_PATH = PROJECT_ROOT / "notebooks" / "creditcard_sample.csv"
 
-if not DATASET_PATH.exists():
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument(
+    "--dataset",
+    type=Path,
+    default=None,
+    help="CSV to train on. Defaults to the real dataset, falling back to the sample.",
+)
+args = parser.parse_args()
+
+
+def resolve_dataset(explicit: Path | None) -> Path:
+    """Pick the dataset, and say clearly what to do when there is none."""
+    if explicit is not None:
+        if not explicit.exists():
+            raise FileNotFoundError(f"Dataset not found at {explicit}")
+        return explicit
+    if DATASET_PATH.exists():
+        return DATASET_PATH
+    if SAMPLE_PATH.exists():
+        print(f"Real dataset absent; training on the synthetic sample at {SAMPLE_PATH}.")
+        print("The resulting model is not meaningful. Run scripts/fetch_dataset.py for real data.")
+        return SAMPLE_PATH
     raise FileNotFoundError(
-        f"Training dataset not found at {DATASET_PATH}. "
-        "Download the Credit Card Fraud Detection dataset and place it there."
+        f"No dataset found.\n"
+        f"  Real:   {DATASET_PATH}  -> python scripts/fetch_dataset.py\n"
+        f"  Sample: {SAMPLE_PATH}   -> python scripts/make_sample_dataset.py"
     )
 
-df = pd.read_csv(DATASET_PATH)
+
+mlflow.set_experiment("fraud-detection")
+
+dataset_path = resolve_dataset(args.dataset)
+df = pd.read_csv(dataset_path)
 
 print(f"Dataset: {df.shape[0]:,} rows | Fraud rate: {df['Class'].mean() * 100:.2f}%")
 
@@ -102,6 +129,7 @@ with mlflow.start_run():
         run_id=mlflow.active_run().info.run_id,
         trained_at=datetime.now(UTC).isoformat(timespec="seconds"),
         sklearn_version=sklearn.__version__,
+        dataset=dataset_path.name,
         metrics={k: float(v) for k, v in metrics.items()},
         decision_threshold=settings.decision_threshold,
     )

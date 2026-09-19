@@ -32,6 +32,9 @@ class ArtifactMetadata:
     run_id: str = ""
     trained_at: str = ""
     sklearn_version: str = ""
+    # Which data produced it. A model fitted on the synthetic sample is not a
+    # meaningful scorer, and the artifact should say so rather than look identical.
+    dataset: str = ""
     # Metrics measured at the operating point the service actually uses, not at
     # sklearn's default 0.5 (#17).
     metrics: dict[str, float] = field(default_factory=dict)
