@@ -3,18 +3,16 @@
 
 import logging
 import time
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from app.schemas.transaction import (
     TransactionRequest,
     PredictionResponse,
     HealthResponse,
     ErrorResponse,
 )
+from app.core.rate_limit import limiter, PREDICT_RATE_LIMIT
 from app.ml.model import fraud_model
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 
-limiter = Limiter(key_func=get_remote_address)
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -50,12 +48,16 @@ def health_check():
         503: {"model": ErrorResponse, "description": "Model not loaded"},
     },
 )
-@limiter.limit("30/minute")  # Rate limit to prevent abuse 
-def predict(transaction: TransactionRequest):
+@limiter.limit(PREDICT_RATE_LIMIT)  # Rate limit to prevent abuse
+def predict(request: Request, transaction: TransactionRequest):
     """
     Receives a single transaction and returns a fraud assessment.
     Pydantic validates the input before this handler is ever called —
     any 422 errors are automatic and don't reach this function.
+
+    `request` is unused by this handler but required: slowapi reads the client
+    address off it to build the rate-limit key, and refuses to decorate a
+    handler that does not accept one.
     """
     if not fraud_model.is_loaded:
         # This shouldn't happen in normal operation but guards against edge cases where the model failed to load at startup
