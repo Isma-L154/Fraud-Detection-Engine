@@ -90,3 +90,28 @@ def test_the_413_response_carries_security_headers(client: TestClient) -> None:
     )
     assert response.status_code == 413
     assert response.headers["X-Content-Type-Options"] == "nosniff"
+
+
+@pytest.mark.parametrize(
+    ("header_value", "expected"),
+    [(b"512", 512), (b"0", 0), (b"not-a-number", 0), (b"", 0), (b"12.5", 0)],
+)
+def test_declared_length_parses_or_falls_back_to_zero(header_value: bytes, expected: int) -> None:
+    """A malformed Content-Length is not something to guess at.
+
+    Returning 0 sends the request down the counting path rather than the fast
+    reject — the body still gets measured, so a garbage header cannot be used either
+    to smuggle a large body through or to have a small one refused.
+    """
+    from app.api.body_limit import BodySizeLimitMiddleware
+
+    middleware = BodySizeLimitMiddleware(app=None, max_bytes=1024)  # type: ignore[arg-type]
+    scope = {"type": "http", "headers": [(b"content-length", header_value)]}
+    assert middleware._declared_length(scope) == expected
+
+
+def test_declared_length_is_zero_when_the_header_is_absent() -> None:
+    from app.api.body_limit import BodySizeLimitMiddleware
+
+    middleware = BodySizeLimitMiddleware(app=None, max_bytes=1024)  # type: ignore[arg-type]
+    assert middleware._declared_length({"type": "http", "headers": []}) == 0
