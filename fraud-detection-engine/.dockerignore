@@ -12,3 +12,7 @@ mlflow.db
 .gitignore
 *.md
 tests/
+
+# Training and development dependencies never enter the image.
+requirements-dev.txt
+requirements-train.txt

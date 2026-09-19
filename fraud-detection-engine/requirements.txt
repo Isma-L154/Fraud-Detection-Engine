@@ -1,13 +1,34 @@
-fastapi==0.115.3
-uvicorn[standard]==0.32.0
-pydantic==2.9.2
-scikit-learn==1.5.2
-pandas==2.2.3
-numpy==1.26.4
-joblib==1.4.2
-mlflow==2.17.2
-evidently==0.4.33
-prometheus-client==0.21.0
-python-dotenv==1.0.1
-slowapi==0.1.9
+# Runtime dependencies — exactly what the service imports, and nothing else.
+# This is what the Docker image installs.
+#
+# The previous pins were fiction: 11 of 13 differed from what was actually
+# installed, several by major versions (numpy 1.26 -> 2.4, scikit-learn 1.5 -> 1.8).
+# Nobody had installed from this file in a long time. These pins are the versions
+# the test suite actually passes against.
+#
+# Training-only and development-only dependencies live in requirements-train.txt
+# and requirements-dev.txt. Keeping them out of the image is not tidiness: mlflow
+# alone pulls 92 packages carrying 118 known vulnerabilities that the service never
+# imports.
+
+fastapi==0.135.3
+uvicorn[standard]==0.44.0
+pydantic==2.12.5
 pydantic-settings==2.15.0
+python-dotenv==1.2.2
+
+scikit-learn==1.8.0
+pandas==2.3.3
+numpy==2.4.4
+joblib==1.5.3
+
+slowapi==0.1.9
+
+# Transitive, pinned explicitly because the versions resolved by default carry
+# known vulnerabilities. Remove these pins once the direct dependencies above
+# require the fixed versions themselves.
+starlette==1.6.0
+anyio==4.15.1
+click==8.5.0
+idna==3.20
+urllib3==2.8.0
