@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A second push to a branch cancels the run still going for the first.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PROJECT_DIR: fraud-detection-engine
+
+jobs:
+  quality:
+    name: Lint, types and tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: fraud-detection-engine/requirements-dev.txt
+
+      - name: Install
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: ruff check app/ notebooks/ tests/
+
+      - name: Format
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: ruff format --check app/ notebooks/ tests/
+
+      - name: Type check
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: mypy
+
+      - name: Tests
+        working-directory: ${{ env.PROJECT_DIR }}
+        # tests/conftest.py supplies ENV and CORS_ORIGINS; Settings refuses to build
+        # without them, which is the behaviour #6 introduced deliberately.
+        run: pytest --cov --cov-report=term-missing --cov-report=xml
+
+      - name: Coverage summary
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import xml.etree.ElementTree as ET
+          root = ET.parse("coverage.xml").getroot()
+          rate = float(root.get("line-rate", 0)) * 100
+          print(f"### Coverage: {rate:.1f}% of `app/`")
+          PY
+
+  security:
+    name: Dependency and static analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: fraud-detection-engine/requirements-dev.txt
+
+      - name: Install
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: pip install -r requirements-dev.txt
+
+      - name: Audit runtime dependencies
+        working-directory: ${{ env.PROJECT_DIR }}
+        # Only the runtime closure is a gate. The training and dev closures carry
+        # known issues that are not reachable from the service (#9); they are
+        # reported for visibility rather than used to block a merge.
+        run: pip-audit --requirement requirements.txt --strict
+
+      - name: Audit training and dev dependencies (informational)
+        working-directory: ${{ env.PROJECT_DIR }}
+        continue-on-error: true
+        run: pip-audit --requirement requirements-dev.txt
+
+      - name: Semgrep
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: p/python p/security-audit p/secrets
+
+  image:
+    name: Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Stand in for the model artifact
+        working-directory: ${{ env.PROJECT_DIR }}
+        # models/fraud_model.pkl is gitignored and has no provisioning path yet
+        # (#4). A placeholder lets this job verify what it can actually verify —
+        # that the Dockerfile builds and pip install resolves — without pretending
+        # the real artifact was exercised. The image built here is never published.
+        run: |
+          mkdir -p models
+          echo "placeholder, not a model" > models/fraud_model.pkl
+
+      - name: Build
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: docker build -t fraud-detection-engine:ci .
