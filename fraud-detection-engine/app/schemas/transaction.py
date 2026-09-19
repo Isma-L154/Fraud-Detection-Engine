@@ -1,9 +1,9 @@
 # Defines the data contract for the /predict endpoint.
-# Pydantic validates every incoming request before it touches the model. 
+# Pydantic validates every incoming request before it touches the model.
 # (Bassically, it checks that the JSON body has the right fields and data types. And rejects the request with a clear error message if anything's wrong.)
 
+
 from pydantic import BaseModel, Field, field_validator
-from typing import Optional
 
 
 class TransactionRequest(BaseModel):

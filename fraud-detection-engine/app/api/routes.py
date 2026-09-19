@@ -1,17 +1,19 @@
-# API route definitions. Each handler is intentionally thin and only responsible for request validation and response formatting. 
+# API route definitions. Each handler is intentionally thin and only responsible for request validation and response formatting.
 # Validation lives in Pydantic, business logic lives in the model loader. THIS IS THE "CONTROLLER" LAYER OF THE APPLICATION.
 
 import logging
 import time
+
 from fastapi import APIRouter, HTTPException, Request, status
-from app.schemas.transaction import (
-    TransactionRequest,
-    PredictionResponse,
-    HealthResponse,
-    ErrorResponse,
-)
-from app.core.rate_limit import limiter, PREDICT_RATE_LIMIT
+
+from app.core.rate_limit import PREDICT_RATE_LIMIT, limiter
 from app.ml.model import fraud_model
+from app.schemas.transaction import (
+    ErrorResponse,
+    HealthResponse,
+    PredictionResponse,
+    TransactionRequest,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -70,7 +72,7 @@ def predict(request: Request, transaction: TransactionRequest):
     try:
         result = fraud_model.predict(transaction.model_dump())
     except Exception as e:
-        # Log the full error internally but never expose raw exception messages to the client 
+        # Log the full error internally but never expose raw exception messages to the client
         # (Because they could contain sensitive info or be exploited by attackers)
         logger.error(f"Prediction failed: {e}", exc_info=True)
         raise HTTPException(
