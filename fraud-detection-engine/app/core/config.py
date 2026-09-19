@@ -45,6 +45,15 @@ class Settings(BaseSettings):
 
     log_level: LogLevel = "INFO"
 
+    log_json: bool | None = Field(
+        None,
+        description=(
+            "Emit logs as JSON. Defaults to plain text in development, where a human "
+            "reads them, and JSON everywhere else, where an aggregator does. Set "
+            "explicitly to override."
+        ),
+    )
+
     cors_origins: list[str] = Field(
         ...,
         description=(
@@ -124,6 +133,13 @@ class Settings(BaseSettings):
         if "*" in origins:
             raise ValueError("cors_origins must not contain '*' — list explicit origins")
         return origins
+
+    @property
+    def json_logs(self) -> bool:
+        """Resolved log format: explicit setting if given, else by environment."""
+        if self.log_json is not None:
+            return self.log_json
+        return self.env != "development"
 
     @property
     def docs_enabled(self) -> bool:
