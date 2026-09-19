@@ -1,6 +1,8 @@
 # Trains a fraud detection pipeline and logs the run to MLflow.
 # Output: models/fraud_model.pkl (scaler + classifier bundled together)
 
+from pathlib import Path
+
 import pandas as pd
 import joblib
 import mlflow
@@ -11,9 +13,21 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import classification_report, roc_auc_score
 from sklearn.pipeline import Pipeline
 
+# Resolved from this file, not the working directory, so the script reads and writes
+# the same places whether it is run from the project root or from notebooks/.
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DATASET_PATH = PROJECT_ROOT / "notebooks" / "creditcard.csv"
+MODEL_PATH = PROJECT_ROOT / "models" / "fraud_model.pkl"
+
 mlflow.set_experiment("fraud-detection")
 
-df = pd.read_csv("notebooks/creditcard.csv")
+if not DATASET_PATH.exists():
+    raise FileNotFoundError(
+        f"Training dataset not found at {DATASET_PATH}. "
+        "Download the Credit Card Fraud Detection dataset and place it there."
+    )
+
+df = pd.read_csv(DATASET_PATH)
 
 print(f"Dataset: {df.shape[0]:,} rows | Fraud rate: {df['Class'].mean()*100:.2f}%")
 
@@ -54,8 +68,9 @@ with mlflow.start_run():
         "f1_fraud":        report["1"]["f1-score"],
     })
 
-    joblib.dump(pipeline, "models/fraud_model.pkl")
-    mlflow.log_artifact("models/fraud_model.pkl")
+    MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(pipeline, MODEL_PATH)
+    mlflow.log_artifact(str(MODEL_PATH))
 
     print(f"\nAUC-ROC: {auc:.4f}")
     print(classification_report(y_test, y_pred, target_names=["legit", "fraud"]))

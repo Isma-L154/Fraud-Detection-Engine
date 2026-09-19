@@ -11,8 +11,14 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-# Canonical path to the model artifact — relative to project root
-MODEL_PATH = Path("models/fraud_model.pkl")
+# Canonical path to the model artifact.
+#
+# Resolved from this file's location, not from the process working directory.
+# A bare relative path meant the service only started when launched from
+# fraud-detection-engine/ — anywhere else it raised FileNotFoundError pointing at
+# a path that looked correct. parents[2] walks app/ml/model.py up to the project root.
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+MODEL_PATH = PROJECT_ROOT / "models" / "fraud_model.pkl"
 
 # Version tag injected into every prediction response. 
 MODEL_VERSION = "1.0.0"
@@ -38,9 +44,11 @@ class FraudDetectionModel:
     def load(self) -> None:
         """Load the pipeline from disk. Call once at application startup."""
         if not MODEL_PATH.exists():
+            # Name the absolute path that was actually checked. The previous message
+            # printed a relative path, which told you nothing about where it looked.
             raise FileNotFoundError(
                 f"Model artifact not found at {MODEL_PATH}. "
-                "Run notebooks/train.py first."
+                f"Train it with: python {PROJECT_ROOT / 'notebooks' / 'train.py'}"
             )
 
         self._pipeline = joblib.load(MODEL_PATH)
