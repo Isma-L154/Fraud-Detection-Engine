@@ -97,3 +97,16 @@ def test_model_path_defaults_inside_the_project() -> None:
 
 def test_model_path_can_be_overridden() -> None:
     assert _settings(model_path=Path("/tmp/other.pkl")).model_path == Path("/tmp/other.pkl")
+
+
+def test_log_format_defaults_by_environment() -> None:
+    """Text where a human reads it, JSON where an aggregator does."""
+    assert _settings(env="development", model_sha256=None).json_logs is False
+    assert _settings(env="staging").json_logs is True
+    assert _settings(env="production").json_logs is True
+
+
+@pytest.mark.parametrize("explicit", [True, False])
+def test_log_format_can_be_overridden_explicitly(explicit: bool) -> None:
+    assert _settings(env="production", log_json=explicit).json_logs is explicit
+    assert _settings(env="development", model_sha256=None, log_json=explicit).json_logs is explicit

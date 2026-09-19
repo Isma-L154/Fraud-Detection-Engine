@@ -85,7 +85,7 @@ def predict(
     except Exception as e:
         # Log the full error internally but never expose raw exception messages to the client
         # (Because they could contain sensitive info or be exploited by attackers)
-        logger.error(f"Prediction failed: {e}", exc_info=True)
+        logger.error("prediction failed", exc_info=True)
         # `from e` keeps the original traceback chained for the logs without putting
         # any of it in the response.
         raise HTTPException(
@@ -94,10 +94,21 @@ def predict(
         ) from e
 
     latency_ms = (time.perf_counter() - start_time) * 1000
+    # Structured fields rather than an interpolated string, so this is queryable
+    # without a regular expression. Deliberately NOT logged: the V1-V28 features and
+    # the amount. V1-V28 are PCA components of real card transactions and the amount
+    # with a timestamp is identifying — the decision is what is useful here, and the
+    # request id is what ties it back to the caller.
     logger.info(
-        f"prediction | risk={result['risk_level']} "
-        f"prob={result['fraud_probability']:.4f} "
-        f"latency={latency_ms:.1f}ms"
+        "prediction",
+        extra={
+            "risk_level": result["risk_level"],
+            "fraud_probability": round(result["fraud_probability"], 4),
+            "is_fraud": result["is_fraud"],
+            "decision_threshold": result["decision_threshold"],
+            "model_version": result["model_version"],
+            "latency_ms": round(latency_ms, 1),
+        },
     )
 
     return PredictionResponse(**result)

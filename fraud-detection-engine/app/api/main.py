@@ -12,13 +12,14 @@ from slowapi.errors import RateLimitExceeded
 
 from app.api.body_limit import BodySizeLimitMiddleware
 from app.api.middleware import SecurityHeadersMiddleware
+from app.api.request_id import RequestIdMiddleware
 from app.api.routes import router
 from app.core.config import settings
 from app.core.logging import configure_logging
 from app.core.rate_limit import limiter
 from app.ml.model import FraudDetectionModel
 
-configure_logging(settings.log_level)
+configure_logging(settings.log_level, json_output=settings.json_logs)
 logger = logging.getLogger(__name__)
 
 
@@ -61,6 +62,10 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # ty
 # Security headers on every response, added before CORS so it runs outermost and
 # cannot be skipped by a response short-circuited further in.
 app.add_middleware(SecurityHeadersMiddleware, settings=settings)
+
+# Correlation id, inside the size limit but outside everything that logs, so every
+# line emitted while handling a request carries the same id.
+app.add_middleware(RequestIdMiddleware)
 
 # Added last so it wraps everything else: an oversized body must be refused before
 # any other middleware or handler has had to hold it in memory.
