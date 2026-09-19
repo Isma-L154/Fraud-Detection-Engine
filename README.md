@@ -1,121 +1,123 @@
 # Fraud Detection Engine
 
-Production-style machine learning system for real-time credit card fraud detection.
+Real-time credit card fraud scoring. A scikit-learn pipeline is served behind a FastAPI REST API
+that returns a fraud probability, a risk bucket, and the threshold the decision was taken at.
 
-This project focuses on designing, training, deploying, and monitoring an end-to-end ML system, going beyond a simple model into a production-oriented architecture.
+The point of this project is the engineering around the model rather than the model itself: what
+it takes to make a scorer you could actually operate — configuration that fails loudly, an
+artifact you can prove is the one you trained, a limit you have seen reject something, and a
+decision you can trace back to the run that produced it.
 
----
-
-## 🚀 Overview
-
-The system exposes a REST API that evaluates financial transactions and returns a fraud probability in real time.
-
-The goal of this project is not just prediction, but demonstrating how machine learning systems are built and maintained in real-world scenarios.
+[![CI](https://github.com/Isma-L154/Fraud-Detection-Engine/actions/workflows/ci.yml/badge.svg)](https://github.com/Isma-L154/Fraud-Detection-Engine/actions/workflows/ci.yml)
 
 ---
 
-## 🧠 Architecture
-
-The system is structured with clear separation of concerns:
-
-- **API Layer** — Handles requests and validation (FastAPI)
-- **ML Layer** — Feature transformation and model inference
-- **Monitoring Layer** — Drift detection and experiment tracking
-- **Infrastructure Layer** — Containerized deployment on AWS
-
-### Stack
-
-- API: FastAPI + Uvicorn  
-- ML: scikit-learn (Pipeline with StandardScaler + RandomForest)  
-- Tracking: MLflow  
-- Monitoring: Evidently  
-- Containerization: Docker  
-- Cloud: AWS (EC2, S3, ECR)  
-
----
-
-## 🔌 API Design
-
-The API exposes three main endpoints:
+## 🔌 API
 
 | Method | Endpoint | Purpose |
-|--------|----------|--------|
-| GET | `/api/v1/health` | Check service and model status |
-| POST | `/api/v1/predict` | Evaluate a transaction |
-| POST | `/api/v1/predict/batch` | Evaluate up to 100 transactions in one request |
-| POST | `/api/v1/retrain` | Trigger model retraining |
+|--------|----------|---------|
+| GET | `/api/v1/health` | Liveness, and whether a model is loaded |
+| POST | `/api/v1/predict` | Score one transaction |
+| POST | `/api/v1/predict/batch` | Score up to 100 in one request — ~100x cheaper per transaction |
+| POST | `/api/v1/metrics` | Prometheus exposition (bearer token) |
+| POST | `/api/v1/retrain` | **Stub.** Returns 202 and queues nothing — see [#11](../../issues/11) |
 
-### Prediction Flow
+```jsonc
+// POST /api/v1/predict
+{"V1": -1.36, "V2": -0.07, /* ... V28 ... */, "Amount": 149.62}
 
-1. A transaction is received as JSON  
-2. Input is validated using Pydantic  
-3. Features are transformed to match training format  
-4. Model generates a fraud probability  
-5. Response is returned  
+// 200
+{"is_fraud": false, "fraud_probability": 0.0123, "risk_level": "LOW",
+ "model_version": "58d6b317487b465a916f7e2b02e8026f", "decision_threshold": 0.3}
+```
+
+`model_version` is the MLflow run id of the training that produced the loaded artifact, and
+`decision_threshold` is the operating point the decision was taken at — together they make a
+disputed decision reconstructable.
 
 ---
 
-## 📊 Model Performance
+## 🧠 How it is put together
 
-Evaluated on a holdout set from the Credit Card Fraud Detection dataset.
+```text
+fraud-detection-engine/
+├── app/
+│   ├── api/          routes, middleware (security headers, body limit, request id, metrics)
+│   ├── core/         configuration, logging, risk rules, artifact integrity
+│   ├── ml/           the scorer, its protocol, the artifact format
+│   └── schemas/      the request and response contracts
+├── scripts/          dataset fetch and a synthetic sample generator
+├── notebooks/train.py
+├── tests/            200 tests, 100% line coverage of app/
+└── Dockerfile, docker-compose.yml, requirements*.txt
+```
 
-| Metric | Value |
-|--------|-------|
-| AUC-ROC | 0.958 |
-| Precision (fraud) | 0.96 |
-| Recall (fraud) | 0.76 |
-| F1 (fraud) | 0.85 |
+Handlers are thin: they validate, delegate and format. Inference lives in `app/ml/`, business
+rules in `app/core/`, and the contract in `app/schemas/`. The scorer reaches handlers through a
+FastAPI dependency against a `TransactionScorer` protocol, so a different estimator or a remote
+scorer can replace it without touching a route.
 
-The dataset is highly imbalanced (~0.17% fraud), handled using `class_weight="balanced"`.
+**Stack:** FastAPI · scikit-learn · pydantic-settings · slowapi · prometheus-client · MLflow
+(training only) · Docker
+
+---
+
+## 🔒 Security
+
+Reviewed against seven baseline controls. Each is implemented or ruled out in writing.
+
+| Control | State |
+|---|---|
+| Secrets in environment variables | Typed settings, validated at import; the app refuses to start on a missing or invalid value |
+| CORS restricted to known origins | Allowlist from configuration, wildcard rejected, and a test proves a disallowed origin is refused |
+| Backend validation | 29 typed fields with bounds and `extra: "forbid"`; `Amount` rejects rather than silently rounding |
+| Input sanitisation | Mostly N/A — no SQL, shell, templating or uploads. The live surface is artifact deserialisation, below |
+| Rate limiting | Per-IP, charged per transaction so batching cannot bypass it. **Proxy-blind and not per-account — [#16](../../issues/16)** |
+| Row Level Security | **N/A** — no datastore, nothing stored. Re-evaluate on the PR that adds one |
+| Content Security Policy | Set on every response, verified with `curl` and in a browser |
+
+**Artifact integrity.** `joblib.load` is `pickle`: loading a model executes its contents. The
+service verifies a SHA-256 *before* unpickling and refuses on mismatch. The digest comes from
+configuration, not from a file beside the artifact — a checksum an artifact-writer can also
+rewrite verifies nothing.
+
+**Not yet done:** there is **no authentication on any endpoint** ([#10](../../issues/10)). CORS
+restrains browsers, not `curl`. Do not expose this service publicly as it stands.
+
+---
+
+## 📊 Model performance
+
+Measured on the 56,962-row holdout (98 frauds, 0.172%), at both thresholds — because the two are
+not the same, and the historically published figures were the first row:
+
+| threshold | precision | recall | F1 | false positives | missed frauds |
+|---|---|---|---|---|---|
+| 0.50 — sklearn's default | 0.96 | 0.76 | 0.85 | 3 | 24 |
+| **0.30 — what the service uses** | **0.93** | **0.82** | **0.87** | 6 | **18** |
+
+AUC-ROC 0.958. The service operates at 0.30: six more frauds caught for three more manual
+reviews, which is the right side of that trade when a review is cheap and a missed fraud is not.
+
+Reproduce with `python notebooks/train.py`, which prints both.
 
 ---
 
 ## ☁️ Deployment
 
-The system follows a simple cloud deployment flow:
+**None.** There is no AWS infrastructure, no IaC and no pipeline — the Docker image builds in CI
+and is never published. The container refuses to start without `ENV`, `CORS_ORIGINS`,
+`MODEL_SHA256` and `METRICS_TOKEN`.
 
-- Model trained locally  
-- Artifact stored in S3  
-- Docker image pushed to ECR  
-- EC2 instance pulls and runs the service  
-
-This setup mirrors a lightweight production environment.
+How the model artifact reaches a production image is undecided and needs the deployment shape
+first — see [#4](../../issues/4).
 
 ---
 
-## 📁 Project Structure
+## 📁 Decisions
 
-```text
-fraud-detection-engine/
-├── app/
-│   ├── api/
-│   │   ├── main.py          # FastAPI app factory + lifespan
-│   │   └── routes.py        # Endpoint handlers
-│   ├── core/                # Reserved for business logic
-│   ├── ml/
-│   │   └── model.py         # Singleton model loader + inference
-│   └── schemas/
-│       └── transaction.py   # Pydantic request/response models
-├── models/                  # Model artifacts (not in git)
-├── notebooks/
-│   └── train.py             # Training pipeline + MLflow logging
-├── tests/
-│   └── test_api.py          # API integration tests
-├── Dockerfile               # Multi-stage build
-├── docker-compose.yml       # Local development
-└── requirements.txt
-```
-
-## 📚 What I Learned
-
-- How to move from a notebook-based model to a production-ready API  
-- The importance of input validation and schema design using Pydantic  
-- How to structure an ML project with clean architecture principles  
-- How to containerize applications using Docker  
-- How experiment tracking (MLflow) helps manage model versions  
-- Why monitoring (Evidently) is critical for detecting data drift  
-- How to deploy an ML service on AWS using EC2, S3, and ECR  
-- The challenges of working with imbalanced datasets  
+Choices where the reasoning matters more than the diff are recorded in
+[`docs/decisions/`](docs/decisions/) — starting with why there is no drift detection.
 
 ---
 
@@ -151,13 +153,6 @@ python scripts/fetch_dataset.py             # Kaggle CLI, or prints manual steps
 ### Commands
 
 ```bash
-# Install runtime + training + development tooling
-pip install -r requirements-dev.txt
-
-# Configure. ENV and CORS_ORIGINS are required — the app refuses to start
-# without them rather than assuming a default.
-cp .env.example .env    # then fill it in
-
 # Tests
 pytest                                    # run the suite
 pytest --cov                              # with a coverage report
