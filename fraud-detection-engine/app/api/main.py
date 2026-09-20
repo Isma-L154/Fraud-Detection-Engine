@@ -64,23 +64,35 @@ app.state.limiter = limiter
 # is narrower than Starlette's signature. The call is correct at runtime.
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
-# Security headers on every response, added before CORS so it runs outermost and
-# cannot be skipped by a response short-circuited further in.
+# Middleware order, outermost first, is the REVERSE of registration order: Starlette
+# inserts each new one at the front of the stack, so the last registered runs first.
+# Verified by inspecting app.user_middleware and by observing which headers a 413
+# actually carries — not inferred.
+#
+#   CORS -> BodySizeLimit -> BatchCost -> Metrics -> RequestId -> SecurityHeaders -> handler
+#
+# Security headers are innermost, so they apply to everything the router produces,
+# including its 404s, 422s and 500s. A response short-circuited further out never
+# reaches this middleware, which is why BodySizeLimitMiddleware sets the headers on
+# its own 413.
 app.add_middleware(SecurityHeadersMiddleware, settings=settings)
 
 # Correlation id, inside the size limit but outside everything that logs, so every
 # line emitted while handling a request carries the same id.
 app.add_middleware(RequestIdMiddleware)
 
-# Inside the request id so metrics see the final status code of every response.
+# Inside the size limit and outside the request id. It therefore counts every
+# response the router produces, but not the 413 the size limit short-circuits.
 app.add_middleware(MetricsMiddleware)
 
-# Counts batch items so the rate limiter can charge per transaction. Registered
-# inside the size limit, which has already capped what this may buffer.
+# Counts batch items so the rate limiter can charge per transaction. It sits inside
+# the size limit, which has already capped what this may buffer — that ordering is
+# what makes buffering the body here safe rather than a denial-of-service vector.
 app.add_middleware(BatchCostMiddleware)
 
-# Added last so it wraps everything else: an oversized body must be refused before
-# any other middleware or handler has had to hold it in memory.
+# Registered after the rest so it sits outside them: an oversized body is refused
+# before metrics, correlation or the handler has had to hold it. Only CORS is
+# further out, which is what puts its headers on this middleware's 413.
 app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_request_bytes)
 
 # Origins come from configuration so staging and production differ without a code
