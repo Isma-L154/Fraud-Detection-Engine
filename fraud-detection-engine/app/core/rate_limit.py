@@ -41,6 +41,10 @@ def rate_limit_key(request: Request) -> str:
         forwarded = request.headers.get(FORWARDED_FOR, "")
         client = forwarded.split(",")[0].strip()
         if client:
+            # False positive: a Flask rule matching a function that is not a route.
+            # This value is a rate-limit bucket key — it reaches slowapi's storage,
+            # never a response body, so there is nothing for XSS to land in.
+            # nosemgrep: python.flask.security.audit.directly-returned-format-string.directly-returned-format-string
             return f"ip:{client}"
     return f"ip:{peer}"
 
