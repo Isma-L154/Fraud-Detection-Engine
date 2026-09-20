@@ -90,9 +90,11 @@ jobs:
         run: pip-audit --requirement requirements-dev.txt
 
       - name: Semgrep
-        uses: semgrep/semgrep-action@v1
-        with:
-          config: p/python p/security-audit p/secrets
+        # Run the CLI rather than semgrep/semgrep-action@v1, which is deprecated and
+        # pins semgrep 1.36 — a version semgrep.dev no longer supports.
+        run: |
+          pip install semgrep
+          semgrep scan --config p/python --config p/security-audit --config p/secrets             --error --metrics off .
 
   image:
     name: Docker build
