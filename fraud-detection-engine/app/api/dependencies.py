@@ -9,6 +9,7 @@ from fastapi import Header, HTTPException, Request, status
 
 from app.core.auth import Consumer, identify, parse_keys
 from app.core.config import settings
+from app.core.rate_limit import auth_retry_after, charge_failed_auth
 from app.ml.protocol import TransactionScorer
 
 API_KEY_HEADER = "X-API-Key"
@@ -40,6 +41,16 @@ def require_consumer(
 
     consumer = identify(x_api_key, keys)
     if consumer is None:
+        # Charge the attempt before refusing. This raises before slowapi's wrapper
+        # around the handler runs, so without a budget of its own a wrong key costs
+        # the caller nothing and can be retried without limit.
+        if not charge_failed_auth(request):
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many failed authentication attempts.",
+                headers={"Retry-After": str(auth_retry_after(request))},
+            )
+
         # The same response whether the header was absent, malformed or simply
         # wrong: distinguishing them tells an attacker which part to work on.
         raise HTTPException(
