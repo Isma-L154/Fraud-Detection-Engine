@@ -5,6 +5,8 @@ The scorer is created once during the application lifespan and stored on
 with `app.dependency_overrides` rather than patching a module attribute.
 """
 
+import secrets
+
 from fastapi import Header, HTTPException, Request, status
 
 from app.core.auth import Consumer, identify, parse_keys
@@ -62,3 +64,38 @@ def require_consumer(
     # The rate limiter reads this to charge per account rather than per IP (#16).
     request.state.consumer = consumer
     return consumer
+
+
+def require_metrics_token(request: Request, authorization: str = Header(default="")) -> None:
+    """Gate /metrics on its bearer token.
+
+    A dependency rather than handler code, so it shares the failed-attempt
+    throttling with require_consumer instead of being a second, unprotected copy of
+    the same idea. Traffic volume, latency distribution and the fraud rate are all
+    commercially sensitive.
+
+    Deliberately a separate credential from the API keys: a scraper is not a
+    consumer, and neither should be able to act as the other.
+    """
+    expected = settings.metrics_token
+    if not expected:
+        # Development only; Settings refuses to build without it elsewhere.
+        return
+
+    presented = authorization.removeprefix("Bearer ").strip()
+    # compare_digest on bytes: a plain == leaks the length and matching prefix
+    # through timing, and the str form refuses non-ASCII input.
+    if not secrets.compare_digest(
+        presented.encode("utf-8", errors="surrogatepass"), expected.encode("utf-8")
+    ):
+        if not charge_failed_auth(request):
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many failed authentication attempts.",
+                headers={"Retry-After": str(auth_retry_after(request))},
+            )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authorised.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
