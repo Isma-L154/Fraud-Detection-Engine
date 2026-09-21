@@ -113,10 +113,11 @@ class Settings(BaseSettings):
         128 * 1024,
         gt=0,
         description=(
-            "Largest request body accepted, in bytes. A valid /predict payload is "
-            "about 709 bytes, so 16 KiB leaves ample headroom while keeping an "
-            "unauthenticated request from costing more memory than the work it asks "
-            "for. Raise it deliberately when the batch endpoint lands (#26)."
+            "Largest request body accepted, in bytes. Default 128 KiB: a single "
+            "/predict payload is about 709 bytes and a full batch of max_batch_size "
+            "about 70 KB, so this leaves headroom for the larger of the two while "
+            "keeping one request from costing more memory than the work it asks for. "
+            "Raising max_batch_size means raising this with it."
         ),
     )
 

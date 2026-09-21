@@ -15,8 +15,9 @@ that travels with it.
 A serialisation format that is not executable — ONNX, or skops for scikit-learn —
 would remove the class of problem rather than guard it, and is the better long-term
 answer. It is deferred deliberately: it changes the training pipeline, the artifact
-format and the loading path at once, which is its own piece of work. Tracked as a
-follow-up on #15.
+format and the loading path at once, which is its own piece of work. Tracked in
+issue #57, which is where that decision gets made and recorded — this comment
+previously pointed at #15, which had already been closed.
 """
 
 import hashlib

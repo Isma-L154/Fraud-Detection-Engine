@@ -159,3 +159,20 @@ def test_response_states_the_threshold_that_produced_the_decision(
     """A fraud decision that cannot be attributed to a threshold cannot be audited."""
     result = _model_returning(0.4).predict(valid_transaction)
     assert result["decision_threshold"] == model_module.settings.decision_threshold
+
+
+def test_risk_thresholds_contains_only_boundaries_that_are_read() -> None:
+    """A threshold nobody reads invites someone to 'fix' the range by editing a
+    number with no effect.
+
+    RISK_THRESHOLDS carried a "HIGH": 1.01 entry described as a catch-all upper
+    bound. risk_level checks LOW, then MEDIUM, then returns HIGH unconditionally —
+    the entry was never read and the bound it documented did not exist.
+    """
+    assert set(risk_module.RISK_THRESHOLDS) == {"LOW", "MEDIUM"}
+
+
+@pytest.mark.parametrize("probability", [0.0, 0.1, 0.2999, 0.3, 0.5, 0.6999, 0.7, 0.9, 1.0])
+def test_every_probability_maps_to_a_known_bucket(probability: float) -> None:
+    """The buckets have to cover the whole domain a probability can take."""
+    assert risk_module.risk_level(probability) in {"LOW", "MEDIUM", "HIGH"}
