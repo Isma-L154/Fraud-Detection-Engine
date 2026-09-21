@@ -105,3 +105,91 @@ def test_retrain_is_limited_far_more_strictly(
 
     assert codes[:2] == [501, 501], "the first two are served (and report 501 by design)"
     assert codes[2] == 429, "the third exceeds the 2/hour limit"
+
+
+def test_failed_authentication_is_throttled(
+    client: TestClient, valid_transaction: dict[str, float], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without this, an attacker guesses keys for free.
+
+    require_consumer raises during FastAPI's dependency resolution, before slowapi's
+    wrapper around the handler runs, so a 401 never reached the limiter at all: 60
+    wrong keys produced 60 401s and consumed nothing.
+    """
+    from app.core.rate_limit import reset_auth_throttle
+
+    monkeypatch.setattr(settings, "api_keys", dict(KEYS))
+    monkeypatch.setattr(settings, "auth_failure_rate_limit", "5/minute")
+    reset_auth_throttle()
+
+    wrong = {API_KEY_HEADER: "w" * 32}
+    codes = [
+        client.post("/api/v1/predict", json=valid_transaction, headers=wrong).status_code
+        for _ in range(7)
+    ]
+
+    assert codes[:5] == [401] * 5, "the first five attempts are refused normally"
+    assert codes[5] == 429, "the sixth exceeds the attempt budget"
+    assert codes[6] == 429
+
+
+def test_throttling_failures_does_not_penalise_a_valid_consumer(
+    client: TestClient, valid_transaction: dict[str, float], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A wrong key must not lock out the caller who has the right one."""
+    from app.core.rate_limit import limiter, reset_auth_throttle
+
+    monkeypatch.setattr(settings, "api_keys", dict(KEYS))
+    monkeypatch.setattr(settings, "auth_failure_rate_limit", "3/minute")
+    reset_auth_throttle()
+    monkeypatch.setattr(limiter, "enabled", True)
+    limiter.reset()
+
+    for _ in range(4):
+        client.post("/api/v1/predict", json=valid_transaction, headers={API_KEY_HEADER: "w" * 32})
+
+    ok = client.post(
+        "/api/v1/predict", json=valid_transaction, headers={API_KEY_HEADER: KEYS["alpha"]}
+    )
+    assert ok.status_code == 200
+
+
+def test_a_successful_request_does_not_consume_the_attempt_budget(
+    client: TestClient, valid_transaction: dict[str, float], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only failures are counted. Charging successes would throttle normal traffic
+    twice — the per-consumer limit already covers that."""
+    from app.core.rate_limit import reset_auth_throttle
+
+    monkeypatch.setattr(settings, "api_keys", dict(KEYS))
+    monkeypatch.setattr(settings, "auth_failure_rate_limit", "2/minute")
+    reset_auth_throttle()
+
+    good = {API_KEY_HEADER: KEYS["alpha"]}
+    for _ in range(5):
+        assert (
+            client.post("/api/v1/predict", json=valid_transaction, headers=good).status_code == 200
+        )
+
+    # The budget is untouched, so a wrong key still gets its normal 401.
+    wrong = client.post(
+        "/api/v1/predict", json=valid_transaction, headers={API_KEY_HEADER: "w" * 32}
+    )
+    assert wrong.status_code == 401
+
+
+def test_the_throttled_response_says_when_to_retry(
+    client: TestClient, valid_transaction: dict[str, float], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.core.rate_limit import reset_auth_throttle
+
+    monkeypatch.setattr(settings, "api_keys", dict(KEYS))
+    monkeypatch.setattr(settings, "auth_failure_rate_limit", "1/minute")
+    reset_auth_throttle()
+
+    wrong = {API_KEY_HEADER: "w" * 32}
+    client.post("/api/v1/predict", json=valid_transaction, headers=wrong)
+    throttled = client.post("/api/v1/predict", json=valid_transaction, headers=wrong)
+
+    assert throttled.status_code == 429
+    assert "Retry-After" in throttled.headers

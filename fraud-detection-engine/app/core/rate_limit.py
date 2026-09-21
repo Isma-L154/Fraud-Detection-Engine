@@ -5,6 +5,11 @@
 # so slowapi can find it at request time. Two separate Limiter objects — which is
 # what this module replaced — decorate and enforce against different state.
 
+import time
+
+from limits import parse
+from limits.storage import MemoryStorage
+from limits.strategies import FixedWindowRateLimiter
 from slowapi import Limiter
 from starlette.requests import Request
 
@@ -52,3 +57,47 @@ def rate_limit_key(request: Request) -> str:
 
 
 limiter = Limiter(key_func=rate_limit_key)
+
+
+# Failed authentication needs its own budget, separate from slowapi's.
+#
+# require_consumer raises its 401 during FastAPI's dependency resolution, which
+# happens before slowapi's wrapper around the handler ever runs — so a wrong key
+# never reached the request limiter at all. Sixty wrong keys produced sixty 401s
+# and consumed nothing.
+#
+# In-process storage, like the metrics registry: correct with one worker per
+# container, which is what the Dockerfile runs and why.
+_auth_storage = MemoryStorage()
+_auth_throttle = FixedWindowRateLimiter(_auth_storage)
+_AUTH_BUCKET = "auth-failure"
+
+
+def charge_failed_auth(request: Request) -> bool:
+    """Record a failed authentication attempt.
+
+    Returns False once the budget for this caller is spent. Keyed by the same
+    function as everything else, which for an unauthenticated request resolves to
+    the caller's address — there is no account yet, which is the whole point.
+
+    The limit is parsed per call rather than cached so that changing it in
+    configuration takes effect; this runs only on the failure path.
+    """
+    return bool(
+        _auth_throttle.hit(
+            parse(settings.auth_failure_rate_limit), _AUTH_BUCKET, rate_limit_key(request)
+        )
+    )
+
+
+def auth_retry_after(request: Request) -> int:
+    """Seconds until this caller may try again."""
+    reset_at, _ = _auth_throttle.get_window_stats(
+        parse(settings.auth_failure_rate_limit), _AUTH_BUCKET, rate_limit_key(request)
+    )
+    return max(1, int(reset_at - time.time()))
+
+
+def reset_auth_throttle() -> None:
+    """Clear the attempt budget. For tests; nothing in the app calls it."""
+    _auth_storage.reset()

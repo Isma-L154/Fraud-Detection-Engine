@@ -75,6 +75,17 @@ class Settings(BaseSettings):
         ),
     )
 
+    auth_failure_rate_limit: str = Field(
+        "10/minute",
+        description=(
+            "Budget for FAILED authentication attempts, per caller address. Only "
+            "failures are counted: charging successes would throttle normal traffic "
+            "twice, since predict_rate_limit already covers that. Without this an "
+            "attacker guesses keys for free — the 401 is raised during dependency "
+            "resolution, before the request limiter is reached."
+        ),
+    )
+
     trusted_proxies: list[str] = Field(
         default_factory=list,
         description=(

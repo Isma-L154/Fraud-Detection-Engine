@@ -79,6 +79,21 @@ def loaded_model(fake_pipeline: FakePipeline) -> FakePipeline:
 
 
 @pytest.fixture(autouse=True)
+def clear_auth_throttle() -> Iterator[None]:
+    """Reset the failed-authentication budget between tests.
+
+    It is module state shared by the whole process, so without this the 401s one
+    test produces spend the budget of every test after it — and the failure lands
+    somewhere unrelated to the cause.
+    """
+    from app.core.rate_limit import reset_auth_throttle
+
+    reset_auth_throttle()
+    yield
+    reset_auth_throttle()
+
+
+@pytest.fixture(autouse=True)
 def disable_rate_limit(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """Rate limiting is off by default.
 
