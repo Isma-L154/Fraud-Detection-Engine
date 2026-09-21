@@ -104,3 +104,37 @@ def test_a_short_metrics_token_is_rejected() -> None:
     """A guessable token is not a control."""
     with pytest.raises(ValidationError):
         deployed_settings(metrics_token="short")
+
+
+def test_a_wrong_metrics_token_is_throttled(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The metrics token checked inside the handler got none of the failed-attempt
+    throttling that #51 added, because that lives in a dependency.
+
+    Moving the check into one closes the gap rather than duplicating the control.
+    """
+    from app.core.rate_limit import reset_auth_throttle
+
+    monkeypatch.setattr(settings, "metrics_token", "s" * 32)
+    monkeypatch.setattr(settings, "auth_failure_rate_limit", "3/minute")
+    reset_auth_throttle()
+
+    codes = [client.get("/api/v1/metrics").status_code for _ in range(5)]
+
+    assert codes[:3] == [401] * 3
+    assert codes[3] == 429, "a wrong token must consume the attempt budget"
+
+
+def test_a_valid_metrics_token_still_works_after_failures(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.core.rate_limit import reset_auth_throttle
+
+    monkeypatch.setattr(settings, "metrics_token", "s" * 32)
+    monkeypatch.setattr(settings, "auth_failure_rate_limit", "2/minute")
+    reset_auth_throttle()
+
+    client.get("/api/v1/metrics")
+    ok = client.get("/api/v1/metrics", headers={"Authorization": "Bearer " + "s" * 32})
+    assert ok.status_code == 200

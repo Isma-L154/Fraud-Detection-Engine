@@ -191,3 +191,30 @@ def test_a_completely_different_scorer_can_be_substituted(
     assert body["is_fraud"] is True
     assert body["model_version"] == "stub-9.9.9"
     assert health["model_version"] == "stub-9.9.9"
+
+
+def test_both_scoring_endpoints_share_one_error_path(
+    make_client: Any, valid_transaction: dict[str, float]
+) -> None:
+    """They duplicated the load check, the try/except and the timing. Extracting
+    that is only safe if both still behave identically — same status, same body."""
+    from .conftest import ExplodingPipeline
+
+    client = make_client(ExplodingPipeline())
+    single = client.post("/api/v1/predict", json=valid_transaction)
+    batch = client.post("/api/v1/predict/batch", json={"transactions": [valid_transaction]})
+
+    assert single.status_code == batch.status_code == 500
+    assert single.json() == batch.json()
+
+
+def test_both_scoring_endpoints_report_the_model_absent_identically(
+    unloaded_client: TestClient, valid_transaction: dict[str, float]
+) -> None:
+    single = unloaded_client.post("/api/v1/predict", json=valid_transaction)
+    batch = unloaded_client.post(
+        "/api/v1/predict/batch", json={"transactions": [valid_transaction]}
+    )
+
+    assert single.status_code == batch.status_code == 503
+    assert single.json() == batch.json()

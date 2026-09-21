@@ -3,15 +3,14 @@
 # model loader. This is the controller layer.
 
 import logging
-import secrets
 import time
+from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from app.api import metrics
-from app.api.dependencies import get_scorer, require_consumer
+from app.api.dependencies import get_scorer, require_consumer, require_metrics_token
 from app.core.auth import Consumer
-from app.core.config import settings
 from app.core.rate_limit import PREDICT_RATE_LIMIT, RETRAIN_RATE_LIMIT, limiter
 from app.ml.protocol import TransactionScorer
 from app.schemas.transaction import (
@@ -32,7 +31,46 @@ def _batch_cost(request: Request) -> int:
     return int(request.scope.get("state", {}).get("batch_size", 1))
 
 
-# ---------------------------------------------------------------------------------
+def _score(
+    scorer: TransactionScorer, rows: list[dict[str, float]]
+) -> tuple[list[dict[str, Any]], float]:
+    """Score rows with the guards both endpoints need, and time it.
+
+    The load check, the error containment and the metric increments were written
+    twice and had already started to drift — one handler logged before incrementing
+    and the other after. They are one responsibility, so they live in one place.
+
+    Callers pass at least one row: the single endpoint passes exactly one and the
+    batch schema sets min_length=1. An empty list would make `results[0]` fail in
+    the caller, which is why there is no defensive branch pretending otherwise.
+    """
+    if not scorer.is_loaded:
+        # Should not happen in normal operation: the service refuses to start when
+        # the artifact cannot be loaded. This guards a scorer swapped at runtime.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Model is not available. Try again later.",
+        )
+
+    start = time.perf_counter()
+    try:
+        with metrics.PREDICTION_DURATION.time():
+            results = scorer.predict_many(rows)
+    except Exception as e:
+        # Log the traceback, return a generic message: an exception string can carry
+        # internal detail, and `from e` keeps the chain for the logs without putting
+        # any of it in the response.
+        logger.error("prediction failed", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Prediction failed. The error has been logged.",
+        ) from e
+
+    latency_ms = (time.perf_counter() - start) * 1000
+    for result in results:
+        metrics.PREDICTIONS.labels(result["risk_level"], str(result["is_fraud"]).lower()).inc()
+
+    return results, latency_ms
 
 
 # Called by the container HEALTHCHECK in the Dockerfile, so this is a production
@@ -54,9 +92,6 @@ def health_check(scorer: TransactionScorer = Depends(get_scorer)) -> HealthRespo
     )
 
 
-# ---------------------------------------------------------------------------------
-
-
 # The main fraud prediction endpoint. Expects a JSON body matching TransactionRequest.
 @router.post(
     "/predict",
@@ -68,7 +103,7 @@ def health_check(scorer: TransactionScorer = Depends(get_scorer)) -> HealthRespo
         503: {"model": ErrorResponse, "description": "Model not loaded"},
     },
 )
-@limiter.limit(PREDICT_RATE_LIMIT)  # Rate limit to prevent abuse
+@limiter.limit(PREDICT_RATE_LIMIT)
 def predict(
     request: Request,
     transaction: TransactionRequest,
@@ -84,30 +119,9 @@ def predict(
     a handler that does not accept one, and the rate-limit key is read off it —
     the authenticated consumer when there is one, the caller's address otherwise.
     """
-    if not scorer.is_loaded:
-        # Should not happen in normal operation, but guards the case where the model
-        # failed to load at startup.
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Model is not available. Try again later.",
-        )
-    start_time = time.perf_counter()
+    results, latency_ms = _score(scorer, [transaction.model_dump()])
+    result = results[0]
 
-    try:
-        with metrics.PREDICTION_DURATION.time():
-            result = scorer.predict(transaction.model_dump())
-    except Exception as e:
-        # Log the full error internally but never expose raw exception messages to the client
-        # (Because they could contain sensitive info or be exploited by attackers)
-        logger.error("prediction failed", exc_info=True)
-        # `from e` keeps the original traceback chained for the logs without putting
-        # any of it in the response.
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Prediction failed. The error has been logged.",
-        ) from e
-
-    latency_ms = (time.perf_counter() - start_time) * 1000
     # Structured fields rather than an interpolated string, so this is queryable
     # without a regular expression. Deliberately NOT logged: the V1-V28 features and
     # the amount. V1-V28 are PCA components of real card transactions and the amount
@@ -126,12 +140,7 @@ def predict(
         },
     )
 
-    metrics.PREDICTIONS.labels(result["risk_level"], str(result["is_fraud"]).lower()).inc()
-
     return PredictionResponse(**result)
-
-
-# ---------------------------------------------------------------------------------
 
 
 # Scores several transactions in one pass. sklearn's per-call overhead dominates a
@@ -146,7 +155,7 @@ def predict(
         503: {"model": ErrorResponse, "description": "Model not loaded"},
     },
 )
-@limiter.limit(PREDICT_RATE_LIMIT, cost=lambda request: _batch_cost(request))
+@limiter.limit(PREDICT_RATE_LIMIT, cost=_batch_cost)
 def predict_batch(
     request: Request,
     batch: BatchTransactionRequest,
@@ -159,27 +168,7 @@ def predict_batch(
     otherwise batching would be a trivial way to multiply throughput past the
     per-request limit by the batch size.
     """
-    if not scorer.is_loaded:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Model is not available. Try again later.",
-        )
-
-    start_time = time.perf_counter()
-
-    try:
-        with metrics.PREDICTION_DURATION.time():
-            results = scorer.predict_many([t.model_dump() for t in batch.transactions])
-    except Exception as e:
-        logger.error("batch prediction failed", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Prediction failed. The error has been logged.",
-        ) from e
-
-    latency_ms = (time.perf_counter() - start_time) * 1000
-    for result in results:
-        metrics.PREDICTIONS.labels(result["risk_level"], str(result["is_fraud"]).lower()).inc()
+    results, latency_ms = _score(scorer, [t.model_dump() for t in batch.transactions])
 
     logger.info(
         "batch prediction",
@@ -187,7 +176,7 @@ def predict_batch(
             "count": len(results),
             "latency_ms": round(latency_ms, 1),
             "latency_ms_per_transaction": round(latency_ms / len(results), 3),
-            "model_version": results[0]["model_version"] if results else "",
+            "model_version": results[0]["model_version"],
             "consumer": consumer.name,
         },
     )
@@ -196,9 +185,6 @@ def predict_batch(
         predictions=[PredictionResponse(**r) for r in results],
         count=len(results),
     )
-
-
-# ---------------------------------------------------------------------------------
 
 
 # Retraining is not implemented. The endpoint remains so the contract and its
@@ -237,32 +223,19 @@ def retrain(
     )
 
 
-# ---------------------------------------------------------------------------------
-
-
 @router.get(
     "/metrics",
     summary="Prometheus metrics",
     include_in_schema=False,  # internal telemetry, not part of the public contract
+    dependencies=[Depends(require_metrics_token)],
 )
-def prometheus_metrics(authorization: str = Header(default="")) -> Response:
+def prometheus_metrics() -> Response:
     """Exposition endpoint for a scraper.
 
-    Requires a bearer token outside development. Traffic volume, latency
-    distribution and the fraud rate are all commercially sensitive, and a public
-    /metrics hands them to anyone.
+    The token check is a dependency, so it shares the failed-attempt throttling
+    with the API-key path rather than being a second, unprotected copy of the same
+    idea. Declared in `dependencies=` rather than as a parameter because the
+    handler has no use for its result — it either ran or the request was refused.
     """
-    expected = settings.metrics_token
-    if expected:
-        presented = authorization.removeprefix("Bearer ").strip()
-        # compare_digest rather than ==: a plain comparison on a secret leaks its
-        # length and prefix through timing.
-        if not secrets.compare_digest(presented, expected):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Not authorised.",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
     payload, content_type = metrics.render()
     return Response(content=payload, media_type=content_type)
