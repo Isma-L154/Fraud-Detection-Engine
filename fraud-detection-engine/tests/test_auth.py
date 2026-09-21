@@ -110,3 +110,38 @@ def test_duplicate_api_keys_are_rejected() -> None:
 
 def test_the_configured_consumer_is_usable() -> None:
     assert deployed_settings().api_keys[CONSUMER] == API_KEY
+
+
+# Header values are latin-1 on the wire, so a real client can send bytes that decode
+# to a non-ASCII str. httpx refuses to encode such a value from a str, which is why
+# these are passed as bytes — the same thing curl would put on the socket.
+LATIN1_E = bytes([0xE9])
+HIGH_BYTE = bytes([0xFF])
+
+
+@pytest.mark.parametrize(
+    "presented",
+    [LATIN1_E * 32, bytes([0x00]) * 32, b"a" * 32 + LATIN1_E, HIGH_BYTE * 32],
+)
+def test_a_non_ascii_key_is_refused_not_crashed(
+    client: TestClient, authenticated: dict[str, str], presented: bytes
+) -> None:
+    """secrets.compare_digest raises TypeError on non-ASCII str inputs.
+
+    Starlette decodes headers as latin-1, so one accented byte produced a str that
+    compare_digest refused to compare. Left unhandled that turned a one-byte header
+    into a 500 with a logged stack trace, and made the response differ by input
+    shape — the property the 401 path exists to avoid, since absent, malformed and
+    wrong must be indistinguishable.
+    """
+    response = client.post("/api/v1/predict", json={}, headers={API_KEY_HEADER: presented})
+    assert response.status_code == 401
+
+
+def test_identify_handles_non_ascii_without_raising() -> None:
+    assert identify(LATIN1_E.decode("latin-1") * 32, parse_keys(KEYS)) is None
+
+
+def test_identify_still_matches_after_the_encoding_change() -> None:
+    """The fix must not break the thing it protects."""
+    assert identify(KEYS["alpha"], parse_keys(KEYS)) == Consumer(name="alpha")
