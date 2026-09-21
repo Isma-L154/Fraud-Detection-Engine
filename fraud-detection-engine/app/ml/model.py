@@ -32,9 +32,11 @@ MODEL_PATH = settings.model_path
 
 
 class FraudDetectionModel:
-    """
-    Wraps the trained sklearn Pipeline with production concerns:
-    versioning, input validation, risk bucketing, and error handling.
+    """Holds the trained pipeline and scores transactions with it.
+
+    Loading, provenance and inference only. Input is validated by the Pydantic
+    schema before this is reached, and probabilities are mapped to risk buckets by
+    app/core/risk.py — this class does neither.
     """
 
     def __init__(self) -> None:
@@ -103,7 +105,7 @@ class FraudDetectionModel:
     def metadata(self) -> ArtifactMetadata:
         return self._metadata
 
-    def predict(self, features: dict) -> dict:
+    def predict(self, features: dict[str, float]) -> dict[str, Any]:
         """
         Run inference on a single transaction.
 
@@ -111,7 +113,9 @@ class FraudDetectionModel:
             features: dict matching TransactionRequest fields (V1-V28 + Amount)
 
         Returns:
-            dict with is_fraud, fraud_probability, risk_level, model_version
+            dict with is_fraud, fraud_probability, risk_level, model_version and
+            decision_threshold — the last being what makes a decision auditable
+            after the fact.
         """
         return self.predict_many([features])[0]
 

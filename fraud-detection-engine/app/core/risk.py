@@ -14,12 +14,16 @@ manual review changes relative to the cost of a missed fraud. The buckets move w
 whoever reads the response wants a different granularity.
 """
 
-# Upper bound of each bucket, exclusive. A probability below LOW is "LOW", below
-# MEDIUM is "MEDIUM", anything else is "HIGH".
+# The two boundaries between the three buckets. Below LOW is "LOW", below MEDIUM is
+# "MEDIUM", anything else is "HIGH".
+#
+# There is no entry for HIGH: it is what a probability falls into when it is below
+# neither boundary, so there is nothing to compare it against. A third entry existed
+# and was never read, which invited someone to change the top of the range by
+# editing a number with no effect.
 RISK_THRESHOLDS = {
     "LOW": 0.30,
     "MEDIUM": 0.70,
-    "HIGH": 1.01,  # catch-all upper bound
 }
 
 

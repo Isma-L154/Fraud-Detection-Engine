@@ -80,9 +80,9 @@ def predict(
     Pydantic validates the input before this handler is ever called —
     any 422 errors are automatic and don't reach this function.
 
-    `request` is unused by this handler but required: slowapi reads the client
-    address off it to build the rate-limit key, and refuses to decorate a
-    handler that does not accept one.
+    `request` is unused by this handler but required: slowapi refuses to decorate
+    a handler that does not accept one, and the rate-limit key is read off it —
+    the authenticated consumer when there is one, the caller's address otherwise.
     """
     if not scorer.is_loaded:
         # Should not happen in normal operation, but guards the case where the model

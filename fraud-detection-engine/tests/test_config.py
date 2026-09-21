@@ -122,3 +122,18 @@ def test_log_format_defaults_by_environment() -> None:
 def test_log_format_can_be_overridden_explicitly(explicit: bool) -> None:
     assert _settings(env="production", log_json=explicit).json_logs is explicit
     assert _settings(env="development", model_sha256=None, log_json=explicit).json_logs is explicit
+
+
+def test_field_descriptions_do_not_contradict_their_values() -> None:
+    """max_request_bytes documented "16 KiB" while defaulting to 128 KiB, and told
+    the reader to raise it "when the batch endpoint lands" — which it had.
+
+    A reader sizing a limit against an attack budget takes the documented number
+    over the real one, so a description that disagrees with its default is worse
+    than none.
+    """
+    field = Settings.model_fields["max_request_bytes"]
+    described_kib = f"{field.default // 1024} KiB"
+    assert described_kib in (field.description or ""), (
+        f"description should mention the real default ({described_kib})"
+    )
